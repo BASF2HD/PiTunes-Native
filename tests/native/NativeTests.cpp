@@ -240,6 +240,14 @@ private slots:
         widget.setReducedMotion(true); widget.select(4); QVERIFY(!widget.animating()); QCOMPARE(widget.currentIndex(), 4);
         QSignalSpy opened(&widget, &CoverFlowWidget::activated); QTest::keyClick(&widget, Qt::Key_Return); QCOMPARE(opened.count(), 1);
         const auto frame = widget.grab().toImage(); QVERIFY(!frame.isNull());
+        // The 260 px centre cover spans x=270 to x=530. The neighbouring
+        // covers should be clickable immediately beyond either edge.
+        QTest::mouseClick(&widget, Qt::LeftButton, Qt::NoModifier, QPoint(538, 150));
+        QCOMPARE(widget.currentIndex(), 5);
+        widget.select(4);
+        widget.repaint();
+        QTest::mouseClick(&widget, Qt::LeftButton, Qt::NoModifier, QPoint(262, 150));
+        QCOMPARE(widget.currentIndex(), 3);
     }
 };
 QTEST_MAIN(NativeTests)

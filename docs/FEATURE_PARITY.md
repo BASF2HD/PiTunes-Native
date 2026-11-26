@@ -13,7 +13,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Full-text search | SQLite FTS5, fallback | Native debounced album search; Enter opens matching songs, server limit 120 |
 | Scan progress, incremental rescan, cache rebuild | scanner/art resolver | Rescan/rebuild controls; progress presentation pending |
 | Artwork, missing/corrupt fallback | backend 128/420 thumbnails | Async bounded native cache/reflections/fallback, decode/LRU/jobs tested |
-| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter prototype rendered; nine-cover limit, idle/navigation tests passed; exact visual parity pending |
+| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter rendering with adjacent covers tucked behind the centre; nine-cover limit and idle/navigation tests passed; exact visual parity pending |
 | Mouse, wheel, keyboard, touchscreen, drag | web event handlers | Native handlers implemented; keyboard QTest passed; physical touch pending |
 | Album/song direct playback | ID/file routes, fast start/full prefix | Native submits exact file/full album URI queue; MPD hardware pending |
 | Play / pause / stop / previous / next | MPD API | Native async intents, bounded serialization; real HTTP fixture transport tests |

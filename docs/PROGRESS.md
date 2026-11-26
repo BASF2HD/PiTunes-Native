@@ -58,6 +58,11 @@ commits pushed only to BASF2HD/PiTunes-Native/main; no original remote here.
   [run 45906727236](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906727236).
   ARM package execution uses QEMU userspace, not physical Pi hardware.
 
+The nearest side covers now overlap the centre cover slightly, closing the gap.
+Checked the seam in an 800×480 Mac window and tested click selection just outside
+both centre edges. The regression failed with the old geometry and passed in
+both Debug and Release after the adjustment.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

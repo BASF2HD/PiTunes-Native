@@ -56,11 +56,15 @@ void CoverFlowWidget::prefetch() {
     m_artwork->prefetch(keys);
 }
 QPolygonF CoverFlowWidget::polygon(double distance, double size, double top) const {
+    constexpr double sideHalfWidth = .20;
+    constexpr double centreOverlap = .02;
     const double sign = distance < 0 ? -1 : 1;
     const double t = qMin(1., std::abs(distance));
     const double reduced = size * (1. - .16 * t);
-    const double halfWidth = size * (.5 - .30 * t);
-    const double x = width() / 2. + sign * (t * size * .76 + qMax(0., std::abs(distance) - 1.) * size * .27);
+    const double halfWidth = size * (.5 + (sideHalfWidth - .5) * t);
+    // The centre is painted last at rest, hiding the inner edge of each neighbour.
+    const double firstSideOffset = .5 + sideHalfWidth - centreOverlap;
+    const double x = width() / 2. + sign * size * (t * firstSideOffset + qMax(0., std::abs(distance) - 1.) * .27);
     const double y = top + size - reduced;
     const double skew = -size * .065 * t * sign;
     return QPolygonF({QPointF(x - halfWidth, y - skew), QPointF(x + halfWidth, y + skew),
