@@ -143,3 +143,15 @@ failure test further to assert actual failed LightDM state and extract the FAT
 diagnostic report, rather than relying on fault injection alone; rerun pending.
 After this first working Linux target, dispatched i386/armhf/arm64 image builds
 from the same native implementation. No stable release/OTA was published.
+
+## Follow-up source hardening (application packages, no OS rebuild)
+
+Added tested guards against an album drawer opening from a response received
+after navigating away, and cleanup ordering when an API callback destroys its
+client. Shuffle now reflects the initial backend state on its first poll.
+Debug/Release Qt suites now cover 16 substantive cases (18 including init/cleanup).
+Hardened image staging to copy only Git-visible files in approved roots and reject
+symlinks/key paths; an ignored local .env regression fixture is never imported.
+Python suite is now 32 tests. Generated image candidates remain pinned to e428678;
+these follow-up UI corrections ship as independently built application packages.
+No full OS rebuild is needed just to validate these C++ changes.

@@ -32,13 +32,31 @@ def prepare(destination: Path, arch: str):
     if destination.exists() or (destination.is_relative_to(ROOT) and not destination.is_relative_to(ROOT / "image/work")):
         raise ValueError("Destination must be absent; inside this checkout use image/work only")
     destination.mkdir(parents=True)
-    for item in ITEMS:
-        source = ROOT / item
-        if source.is_dir():
-            shutil.copytree(source, destination / item,
-                            ignore=shutil.ignore_patterns("__pycache__", ".DS_Store", "out", "work", "cache"))
-        else:
-            shutil.copy2(source, destination / item)
+    # A local checkout can contain ignored credentials alongside source. Never
+    # recursively copy arbitrary directory contents into a public image.
+    paths = subprocess.check_output([
+        "git", "-c", f"safe.directory={ROOT}", "-C", str(ROOT), "ls-files",
+        "--cached", "--others", "--exclude-standard", "-z",
+    ]).split(b"\0")
+    for raw in paths:
+        if not raw:
+            continue
+        relative = Path(raw.decode())
+        if relative.parts[0] not in ITEMS:
+            continue
+        source = ROOT / relative
+        if source.is_symlink() or any((ROOT / Path(*relative.parts[:i])).is_symlink()
+                                      for i in range(1, len(relative.parts))):
+            raise ValueError(f"Refusing symlinked image source: {relative}")
+        if (any(part in {".git", ".ssh", ".aws"} for part in relative.parts)
+                or source.name in {"id_rsa", "id_ed25519", "id_ecdsa"}
+                or source.name.startswith(".env") or source.suffix in {".key", ".pem", ".p12", ".credentials"}):
+            raise ValueError(f"Refusing sensitive configuration in image source: {relative}")
+        if not source.is_file():
+            continue
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
     (destination / "config/.native-stage").write_text(arch + "\n")
     if arch in ("i386", "amd64"):
         # Preserve proven PC ALSA/mount/recovery adaptations. Browser-specific hunks

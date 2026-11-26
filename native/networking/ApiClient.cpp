@@ -67,8 +67,10 @@ QNetworkReply *ApiClient::request(const QString &path, const QByteArray *body, B
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (error->isEmpty() && (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300))
             *error = QString("API request failed (%1): %2").arg(status).arg(reply->errorString());
-        callback(*data, *error);
+        // User callbacks may destroy the client (and its child replies).
+        // Schedule cleanup before invoking them, with no reply access afterwards.
         reply->deleteLater();
+        callback(*data, *error);
     });
     timer->start(timeoutMs);
     return reply;

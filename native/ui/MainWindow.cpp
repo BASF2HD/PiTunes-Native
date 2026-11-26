@@ -52,6 +52,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     add(transport, "⏭", [this] { command("/api/player/next"); });
     add(transport, "Stop", [this] { command("/api/player/stop"); });
     m_shuffle = add(transport, "Shuffle", [this] { command("/api/player/options", {{"shuffle", !m_player.shuffle}}); });
+    m_shuffle->setCheckable(true);
     transport->addStretch();
     auto *vol = new QLabel("Volume"); transport->addWidget(vol);
     m_volume = new QSlider(Qt::Horizontal); m_volume->setRange(0, 100); m_volume->setMaximumWidth(100);
@@ -99,6 +100,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     });
     connect(m_flow, &CoverFlowWidget::activated, this, [this](int row) { showAlbum(row); });
     connect(m_flow, &CoverFlowWidget::selectionChanged, this, [this](int row) {
+        ++m_drawerGeneration;
         if (!m_demo && row >= m_library->rowCount() - 24) m_library->loadNext();
     });
     connect(m_library, &LibraryModel::error, this, &MainWindow::setMessage);
@@ -144,7 +146,6 @@ void MainWindow::refreshPlayer() {
         m_player = PlayerState::fromJson(object);
         m_play->setText(m_player.state == "play" ? "Ⅱ" : "▶");
         m_repeat->setText("Repeat " + m_player.repeatMode); m_shuffle->setChecked(m_player.shuffle);
-        m_shuffle->setCheckable(true);
         const bool modes = m_player.source != "radio" && m_player.source != "airplay" && m_player.source != "bluetooth";
         m_repeat->setEnabled(modes); m_shuffle->setEnabled(modes);
         if (!m_seek->isSliderDown()) { m_seek->setRange(0, int(qMin(864000., m_player.duration))); m_seek->setValue(int(m_player.elapsed)); }

@@ -12,6 +12,16 @@ spec.loader.exec_module(staging)
 
 
 class NativeStagingTest(unittest.TestCase):
+    def test_ignored_local_environment_file_is_never_imported(self):
+        with tempfile.NamedTemporaryFile(prefix=".env.native-staging-", dir=ROOT / "backend", delete=False) as fixture:
+            fixture.write(b"DO_NOT_COPY_TEST_FIXTURE=1\n")
+        secret = Path(fixture.name)
+        self.addCleanup(secret.unlink, missing_ok=True)
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "native"
+            staging.prepare(output, "amd64")
+            self.assertFalse((output / "backend" / secret.name).exists())
+
     def test_all_targets_have_native_session_and_update_isolation(self):
         with tempfile.TemporaryDirectory() as directory:
             for arch in ("i386", "amd64", "armhf", "arm64"):

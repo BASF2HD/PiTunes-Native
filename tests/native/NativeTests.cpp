@@ -3,6 +3,7 @@
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
 #include <QBuffer>
+#include <QDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
@@ -53,6 +54,32 @@ public:
 class NativeTests : public QObject {
     Q_OBJECT
 private slots:
+    void callbackCanDestroyItsApiClient() {
+        HttpFixture server; auto *api = new ApiClient(server.url()); QPointer<ApiClient> guard(api);
+        bool done = false;
+        api->get("/api/test", [&](QJsonObject, QString error) { QVERIFY(error.isEmpty()); delete api; done = true; });
+        QTRY_VERIFY(done); QVERIFY(guard.isNull());
+    }
+    void navigatingCancelsAPendingAlbumDrawer() {
+        HttpFixture server;
+        server.respond = [](QByteArray request) {
+            if (request.startsWith("GET /api/library/albums")) return HttpFixture::Response{
+                "{\"albums\":[{\"id\":\"1\",\"title\":\"First\"},{\"id\":\"2\",\"title\":\"Second\"}],\"total\":2}"};
+            if (request.startsWith("GET /api/library/album/")) return HttpFixture::Response{
+                "{\"tracks\":[{\"file\":\"first/song.flac\",\"title\":\"Old result\"}]}", 150};
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url()); window.show();
+        auto *library = window.findChild<LibraryModel *>(); QVERIFY(library); QTRY_COMPARE(library->rowCount(), 2);
+        QTest::keyClick(window.coverFlow(), Qt::Key_Return);
+        const auto requestedAlbum = [&server] {
+            for (const auto &request : server.requests) if (request.startsWith("GET /api/library/album/")) return true;
+            return false;
+        };
+        QTRY_VERIFY(requestedAlbum());
+        window.coverFlow()->select(1, false); QTest::qWait(220);
+        QCOMPARE(window.findChildren<QDialog *>().size(), 0);
+    }
     void demoNeverContactsAnAppliance() {
         HttpFixture server; MainWindow window(server.url(), true); window.show();
         for (auto *button : window.findChildren<QPushButton *>())
@@ -64,7 +91,7 @@ private slots:
         server.respond = [](QByteArray req) {
             if (req.startsWith("GET /api/library/albums")) return HttpFixture::Response{"{\"albums\":[{\"id\":\"7\",\"title\":\"Album\"}],\"total\":1}"};
             if (req.startsWith("GET /api/player/state")) return HttpFixture::Response{
-                "{\"inputSource\":\"local\",\"status\":{\"state\":\"play\",\"volume\":65,\"duration\":210},\"song\":{\"file\":\"album/first.flac\",\"Title\":\"First\",\"albumId\":\"7\"}}"};
+                "{\"inputSource\":\"local\",\"status\":{\"state\":\"play\",\"volume\":65,\"duration\":210,\"random\":true},\"song\":{\"file\":\"album/first.flac\",\"Title\":\"First\",\"albumId\":\"7\"}}"};
             return HttpFixture::Response{"{}", 80};
         };
         MainWindow window(server.url()); window.show();
@@ -74,6 +101,9 @@ private slots:
             if (b->text() == "⏭") next = b;
         }
         QVERIFY(play); QVERIFY(next); QTRY_COMPARE(play->text(), QString("Ⅱ"));
+        bool shuffleChecked = false;
+        for (auto *b : window.findChildren<QPushButton *>()) if (b->text() == "Shuffle") shuffleChecked = b->isChecked();
+        QVERIFY(shuffleChecked);
         QTest::mouseClick(next, Qt::LeftButton); QTest::mouseClick(next, Qt::LeftButton);
         const auto nextCount = [&server] { int n = 0; for (const auto &r : server.requests) if (r.startsWith("POST /api/player/next")) ++n; return n; };
         QTRY_COMPARE(nextCount(), 2);

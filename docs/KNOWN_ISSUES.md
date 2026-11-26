@@ -54,3 +54,8 @@ Low-memory artwork prefetch was reviewed for eviction loops: the desired window
 is now bounded by cache capacity, and a valid-image regression test confirms
 requests stop at idle even with a 4 MiB cache. Decoder transient memory is bounded
 separately by two workers, source pixel ceiling and compressed byte limits.
+
+Low-resolution keyboard/modal layouts need further QA with the keyboard open;
+the checked 800x480/480x800 screenshots cover the main player without that overlay.
+Generated e428678 image candidates precede the later stale-drawer/callback cleanup
+corrections; source/application-package validation is tracked separately.

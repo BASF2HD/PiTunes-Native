@@ -25,6 +25,9 @@ release readiness. Update progress and parity records with every milestone.
 - Preserve MIT attribution and third-party notices. Reuse original branding.
   Never import keys, tokens, passwords, Wi-Fi/NAS credentials, real device settings,
   diagnostic dumps or music. Generated builds/images stay outside Git history.
+- Image staging copies only Git-visible files from approved source roots, rejects
+  symlinks/key/credential paths, and excludes ignored local environment files.
+  Never replace this with an unrestricted recursive copy of the checkout.
 
 ## Architecture and compatibility
 

@@ -6,10 +6,10 @@ appliance acceptance. Original dd34c46 remains unchanged.
 | Executed check | Result |
 |---|---|
 | Pinned-source comparison | All 174 original tracked blobs match live GitHub; no unpublished code; destination initial snapshot identical |
-| Python selected suite | 31 passed, including real HTTP migration/update gates and all four staging paths |
+| Python selected suite | 32 passed, including real HTTP migration/update gates and all four staging paths |
 | JavaScript node tests | 24 passed, original identity/counts/CSV/playback contracts |
 | CMake Debug + Release | Native arm64 Mac executables compiled successfully with warnings enabled |
-| CTest / QTest | 14 substantive cases (16 with init/cleanup) passed in both build configurations |
+| CTest / QTest | 16 substantive cases (18 with init/cleanup) passed in both build configurations |
 | Release validator | Shell/Python/JS syntax, App OTA fixtures, signed system fixtures, boot rollback fixtures passed |
 | Native image Mac guard | Refused with explicit root Linux/loop-mount requirement, as intended |
 | Screenshots | Demo and mock-backed Qt raster output inspected; 800x480 and 480x800 layouts checked |
