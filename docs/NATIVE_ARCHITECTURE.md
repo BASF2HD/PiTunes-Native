@@ -14,13 +14,16 @@ dependencies; no functioning GPU is required by the app's painting code.
   total and stale generation guard. Metadata can exceed 5,000 albums; artwork is
   not loaded per row. Failed API never silently selects demo playback.
 - `artwork/ArtworkCache`: byte-costed QCache LRU, 6/12 MiB profiles, hard 4..32 MiB
-  configuration bounds, two network/decode jobs and eleven desired prefetch keys.
+  configuration bounds and two network/decode jobs. The prefetch window fits
+  the byte budget at the maximum decoded thumbnail and reflection size.
   QThreadPool scales/decodes and generates reflections off GUI thread. Compressed
   response <=4 MiB, reject source art above four megapixels, normal output 320 px (256 px on low-memory profiles).
   Plugin transient buffers are additional to cached-byte budget.
-- `coverflow/CoverFlowWidget`: <=9 covers, QTransform projection, cached reflections,
-  time-based .42 s cubic easing at <=30 Hz, timer stops at rest. Unchanged player
-  polls do not invalidate flow. Fine-grained dirty rectangles remain an optimization.
+- `coverflow/CoverFlowWidget`: viewport-based cover count, QTransform projection,
+  aligned bottom edges and cached reflections. The normal artwork budget allows up
+  to 19 visible covers and the low-memory profile allows up to 15. The .42 s cubic
+  easing runs at <=30 Hz and stops at rest. Fine-grained dirty rectangles remain
+  an optimization.
 - `ui/MainWindow`: browse, virtual lists, transport intents, nonoverlapping 1.5 s
   polls, stale guards across commands, full URI queues. Continuation stays backend-owned.
 - `ui/SettingsDialog`: async forms, cleared secret fields, capability-populated

@@ -45,8 +45,9 @@ release readiness. Update progress and parity records with every milestone.
 - Every asynchronous view request needs generation/identity cancellation.
   Playback mutations must not be retried automatically after ambiguous failure.
 - Keep artwork request/decode counts and memory strictly bounded; decode off the
-  GUI thread at thumbnail sizes; cache reflections. Render 7–9 covers, stop
-  animation timers at rest, virtualize lists. Prioritize 1 GB Atom / 512 MB Zero 2 W.
+  GUI thread at thumbnail sizes and cache reflections. Fit visible covers to
+  the viewport within the artwork budget. Stop animation timers at rest and
+  virtualize lists. Prioritize 1 GB Atom / 512 MB Zero 2 W.
 - Offline first paint and local playback must not wait for network, NAS,
   receivers, scans or service enumeration. Display stays awake idle/paused/playing.
   GUI failure must leave MPD/API independent and recover with bounded restarts.

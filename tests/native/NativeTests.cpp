@@ -213,7 +213,7 @@ private slots:
         ApiClient api(server.url()); auto *cache = new ArtworkCache(&api, 4);
         QStringList keys; for (int i = 0; i < 5000; ++i) keys.append("/api/art?id=" + QString::number(i));
         cache->prefetch(keys); QVERIFY(cache->activeJobs() <= 2);
-        QTest::qWait(250); QVERIFY(server.requests.size() <= 11); delete cache;
+        QTest::qWait(250); QVERIFY(server.requests.size() <= cache->prefetchCapacity()); delete cache;
         QTest::qWait(200);
     }
     void lowMemoryPrefetchSettlesWithoutEvictionLoop() {
@@ -221,17 +221,17 @@ private slots:
         QByteArray png; QBuffer buffer(&png); buffer.open(QIODevice::WriteOnly); QVERIFY(image.save(&buffer, "PNG"));
         HttpFixture server; server.respond = [png](QByteArray) { return HttpFixture::Response{png}; };
         ApiClient api(server.url()); ArtworkCache cache(&api, 4);
-        QStringList keys; for (int i = 0; i < 11; ++i) keys.append("/api/art?id=" + QString::number(i));
-        cache.prefetch(keys); QTRY_VERIFY(server.requests.size() >= 10); QTRY_COMPARE(cache.activeJobs(), 0);
+        QStringList keys; for (int i = 0; i < 20; ++i) keys.append("/api/art?id=" + QString::number(i));
+        cache.prefetch(keys); QTRY_COMPARE(server.requests.size(), cache.prefetchCapacity()); QTRY_COMPARE(cache.activeJobs(), 0);
         const auto requests = server.requests.size(); QTest::qWait(120);
-        QCOMPARE(server.requests.size(), requests); QVERIFY(requests <= 11);
+        QCOMPARE(server.requests.size(), requests);
         QVERIFY(cache.bytesUsed() <= cache.budgetBytes());
     }
     void coverNavigationAndIdlePainting() {
         HttpFixture server; ApiClient api(server.url()); LibraryModel library(&api); library.setDemo();
         ArtworkCache cache(&api); CoverFlowWidget widget(&library, &cache);
         widget.resize(800, 400); widget.show(); widget.setFocus();
-        QTest::qWait(50); QVERIFY(!widget.animating()); QVERIFY(widget.visibleCoverCount() <= 9);
+        QTest::qWait(50); QVERIFY(!widget.animating());
         QTest::keyClick(&widget, Qt::Key_Right); QVERIFY(widget.animating());
         QTRY_VERIFY(!widget.animating()); QCOMPARE(widget.currentIndex(), 1);
         widget.select(9); widget.select(12); QTRY_VERIFY(!widget.animating()); QCOMPARE(widget.currentIndex(), 12);
@@ -248,6 +248,34 @@ private slots:
         widget.repaint();
         QTest::mouseClick(&widget, Qt::LeftButton, Qt::NoModifier, QPoint(262, 150));
         QCOMPARE(widget.currentIndex(), 3);
+    }
+    void coverStackFitsViewportAndSharesBaseline() {
+        HttpFixture server;
+        ApiClient api(server.url());
+        LibraryModel library(&api);
+        library.setDemo();
+        ArtworkCache cache(&api);
+        CoverFlowWidget widget(&library, &cache);
+        widget.resize(480, 400);
+        widget.select(7, false);
+        const int narrowCount = widget.visibleCoverCount();
+        widget.resize(1440, 400);
+        QVERIFY(widget.visibleCoverCount() > narrowCount);
+        widget.resize(480, 400);
+        QCOMPARE(widget.visibleCoverCount(), narrowCount);
+        QCOMPARE(widget.currentIndex(), 7);
+
+        widget.resize(800, 400);
+        const auto frame = widget.grab().toImage();
+        const auto pixel = [&frame](int x, int y) {
+            return frame.pixelColor(qRound(x * frame.devicePixelRatio()), qRound(y * frame.devicePixelRatio()));
+        };
+        // With no reflection in demo mode, all three covers end at y=274.
+        // Test the centre and both ends of each tilted neighbour's exposed area.
+        for (int x : {190, 262, 400, 538, 610}) {
+            QVERIFY(pixel(x, 271) != QColor(Qt::black));
+            QCOMPARE(pixel(x, 279), QColor(Qt::black));
+        }
     }
 };
 QTEST_MAIN(NativeTests)

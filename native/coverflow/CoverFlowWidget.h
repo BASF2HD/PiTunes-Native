@@ -23,6 +23,7 @@ signals:
     void activated(int index);
 protected:
     void paintEvent(QPaintEvent *) override;
+    void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *) override;
     void wheelEvent(QWheelEvent *) override;
     void mousePressEvent(QMouseEvent *) override;
@@ -31,6 +32,8 @@ protected:
     bool event(QEvent *) override;
 private:
     void prefetch();
+    double coverSize() const;
+    QPair<int, int> visibleRows(double position) const;
     QPolygonF polygon(double distance, double size, double top) const;
     LibraryModel *m_model;
     ArtworkCache *m_artwork;

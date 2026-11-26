@@ -8,6 +8,13 @@
 #include <cmath>
 
 namespace PiTunes {
+namespace {
+constexpr double sideHalfWidth = .20;
+constexpr double centreOverlap = .02;
+constexpr double firstSideOffset = .5 + sideHalfWidth - centreOverlap;
+constexpr double sideSpacing = .27;
+}
+
 CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWidget *parent)
     : QWidget(parent), m_model(model), m_artwork(artwork) {
     setFocusPolicy(Qt::StrongFocus); setAttribute(Qt::WA_AcceptTouchEvents);
@@ -29,8 +36,21 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { update(); });
 }
 int CoverFlowWidget::visibleCoverCount() const {
-    const int center = qRound(m_position);
-    return qMax(0, qMin(m_model->rowCount() - 1, center + 4) - qMax(0, center - 4) + 1);
+    const auto [first, last] = visibleRows(m_position);
+    return qMax(0, last - first + 1);
+}
+double CoverFlowWidget::coverSize() const {
+    return qMin(width() * .33, height() * .65);
+}
+QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
+    // Cull once a cover's inner edge leaves the viewport. Fractional positions
+    // let edge covers slide out naturally during navigation.
+    const double halfViewport = width() / (2. * coverSize());
+    const double screenReach = 1. + (halfViewport - (firstSideOffset - sideHalfWidth)) / sideSpacing;
+    const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
+    const double reach = qMin(screenReach, double(cacheReach));
+    return {qMax(0, int(std::ceil(position - reach))),
+            qMin(m_model->rowCount() - 1, int(std::floor(position + reach)))};
 }
 void CoverFlowWidget::select(int index, bool animate) {
     index = qBound(0, index, qMax(0, m_model->rowCount() - 1));
@@ -46,7 +66,9 @@ void CoverFlowWidget::setPlayingAlbum(QString id) {
 }
 void CoverFlowWidget::prefetch() {
     QStringList keys;
-    for (int step = 0; step <= 5; ++step) {
+    const auto [first, last] = visibleRows(m_target);
+    const int reach = qMax(m_target - first, last - m_target);
+    for (int step = 0; step <= reach; ++step) {
         for (int sign : {1, -1}) {
             if (step == 0 && sign == -1) continue;
             const auto *album = m_model->album(m_target + step * sign);
@@ -55,20 +77,22 @@ void CoverFlowWidget::prefetch() {
     }
     m_artwork->prefetch(keys);
 }
+void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    prefetch();
+}
 QPolygonF CoverFlowWidget::polygon(double distance, double size, double top) const {
-    constexpr double sideHalfWidth = .20;
-    constexpr double centreOverlap = .02;
     const double sign = distance < 0 ? -1 : 1;
     const double t = qMin(1., std::abs(distance));
     const double reduced = size * (1. - .16 * t);
     const double halfWidth = size * (.5 + (sideHalfWidth - .5) * t);
     // The centre is painted last at rest, hiding the inner edge of each neighbour.
-    const double firstSideOffset = .5 + sideHalfWidth - centreOverlap;
-    const double x = width() / 2. + sign * size * (t * firstSideOffset + qMax(0., std::abs(distance) - 1.) * .27);
-    const double y = top + size - reduced;
+    const double x = width() / 2. + sign * size * (t * firstSideOffset + qMax(0., std::abs(distance) - 1.) * sideSpacing);
+    const double baseline = top + size;
+    const double y = baseline - reduced;
     const double skew = -size * .065 * t * sign;
     return QPolygonF({QPointF(x - halfWidth, y - skew), QPointF(x + halfWidth, y + skew),
-                      QPointF(x + halfWidth, y + reduced + skew), QPointF(x - halfWidth, y + reduced - skew)});
+                      QPointF(x + halfWidth, baseline), QPointF(x - halfWidth, baseline)});
 }
 void CoverFlowWidget::paintEvent(QPaintEvent *) {
     ++m_paints;
@@ -82,11 +106,11 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         painter.drawText(rect(), Qt::AlignCenter, m_model->loading() ? "Loading library…" : "No albums · choose a source in Settings");
         return;
     }
-    const int center = qRound(m_position);
+    const auto [first, last] = visibleRows(m_position);
     QVector<int> rows;
-    for (int i = qMax(0, center - 4); i <= qMin(m_model->rowCount() - 1, center + 4); ++i) rows.append(i);
+    for (int i = first; i <= last; ++i) rows.append(i);
     std::sort(rows.begin(), rows.end(), [this](int a, int b) { return std::abs(a - m_position) > std::abs(b - m_position); });
-    const double size = qMin(width() * .33, height() * .65);
+    const double size = coverSize();
     const double top = height() * .035;
     for (int row : rows) {
         const auto &album = *m_model->album(row);

@@ -63,6 +63,12 @@ Checked the seam in an 800×480 Mac window and tested click selection just outsi
 both centre edges. The regression failed with the old geometry and passed in
 both Debug and Release after the adjustment.
 
+CoverFlow now derives the visible stack from viewport width, cover size and the
+artwork cache budget. Covers and reflections share a baseline. Mac mock renders
+showed 9 covers at 480×800, 15 at 800×480 and 19 at 1440×520, with the same album
+selected. Debug and Release passed the 18-case suite, including the resize and
+rendered baseline regression. Physical-device frame rate remains unmeasured.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

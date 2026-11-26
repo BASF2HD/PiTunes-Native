@@ -16,6 +16,7 @@ public:
     const Artwork *find(const QString &key) const;
     // Only the most recent visible window can enqueue work. At most two network/decode jobs.
     void prefetch(const QStringList &keys);
+    int prefetchCapacity() const;
     int bytesUsed() const { return m_cache.totalCost(); }
     int budgetBytes() const { return m_cache.maxCost(); }
     int activeJobs() const { return m_active.size(); }

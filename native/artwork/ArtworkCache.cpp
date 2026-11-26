@@ -42,11 +42,14 @@ ArtworkCache::ArtworkCache(ApiClient *api, int budgetMiB, QObject *parent)
 }
 ArtworkCache::~ArtworkCache() { m_workers.waitForDone(); }
 const Artwork *ArtworkCache::find(const QString &key) const { return m_cache.object(key); }
+int ArtworkCache::prefetchCapacity() const {
+    // Four bytes per cover pixel plus a reflection at half height.
+    return qMax(1, m_cache.maxCost() / (m_edge * m_edge * 6));
+}
 void ArtworkCache::prefetch(const QStringList &keys) {
     // A desired window must itself fit in cache, or eviction would continuously
     // refetch offscreen artwork even after navigation stopped.
-    const int capacity = qMax(1, m_cache.maxCost() / (m_edge * m_edge * 6));
-    m_desired = keys.mid(0, qMin(11, capacity));
+    m_desired = keys.mid(0, prefetchCapacity());
     // Negative cache is bounded to the current window, so failures cannot grow with the library.
     m_failed.intersect(QSet<QString>(m_desired.begin(), m_desired.end()));
     pump();
@@ -97,8 +100,12 @@ void ArtworkCache::pump() {
         }
         m_api->bytes(url.toString(QUrl::FullyEncoded), [this, guard, key](QByteArray bytes, QString error) {
             if (!guard) return;
-            if (!error.isEmpty() || !m_desired.contains(key)) {
-                m_active.remove(key); m_failed.insert(key); pump(); return;
+            const bool desired = m_desired.contains(key);
+            if (!desired || !error.isEmpty()) {
+                m_active.remove(key);
+                if (desired) m_failed.insert(key);
+                pump();
+                return;
             }
             auto *watcher = new QFutureWatcher<Artwork>(this);
             connect(watcher, &QFutureWatcher<Artwork>::finished, this, [this, key, watcher] {
