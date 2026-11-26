@@ -2,10 +2,10 @@
 
 | Target | Source/build configuration | Physical native boot | Audio / input / resources |
 |---|---|---|---|
-| i386 Atom 1 GB | Debian 12, 686-pae, BIOS + IA32 UEFI | Not tested | Not tested |
-| amd64 Intel/AMD | Debian 13, amd64 kernel, BIOS + x64 UEFI | Not tested | Not tested |
-| armhf Zero 2 W / Pi 3 / 3 B+ | Pi OS Lite Bookworm | Not tested | Not tested |
-| arm64 Pi 4 / Pi 5 | Pi OS Lite Bookworm | Not tested | Not tested |
+| i386 Atom 1 GB | Debian 12 image built; BIOS + IA32 UEFI 1 GiB QEMU smoke passed | Not tested | VM silent-WAV only; physical input/resources untested |
+| amd64 Intel/AMD | Debian 13 image built; BIOS + x64 UEFI 1 GiB QEMU smoke passed | Not tested | VM silent-WAV only; physical input/resources untested |
+| armhf Zero 2 W / Pi 3 / 3 B+ | Pi OS Lite Bookworm image built | Not tested | Not tested |
+| arm64 Pi 4 / Pi 5 | Pi OS Lite Bookworm image built | Not tested | Not tested |
 | Development Mac arm64 | Qt 5.15.19, AppleClang 21, Debug + Release | Application only | Offscreen mock/demo rendering and tests; no target audio |
 
 Debian 12 i386 has an i686 baseline; the chosen 686-pae kernel requires PAE.

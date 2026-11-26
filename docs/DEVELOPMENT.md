@@ -39,7 +39,8 @@ Backend tests (explicit selection avoids the standalone network radio probe):
 ```sh
 python3.12 -m unittest tests.test_album_scanner_identity tests.test_music_export_queries \
   tests.test_userdata_playlists tests.test_playback_modes tests.test_system_update \
-  tests.test_native_policy -v
+  tests.test_native_policy tests.test_native_staging tests.test_browser_migration \
+  tests.test_native_http -v
 node --test tests/*.test.mjs
 PITUNES_VALIDATION_PYTHON=python3.12 ./tools/validate-release.sh
 ```

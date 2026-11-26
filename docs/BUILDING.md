@@ -62,3 +62,11 @@ tests compile under the target userspace. Rootfs screenshots validate software
 painting. None establishes a bootable image, physical input latency, DAC quality,
 RAM targets, actual BIOS/UEFI compatibility, receivers, or power-loss rollback.
 Run and retain the full boot/hardware matrix before publishing release claims.
+
+## Observed development builds
+
+All four image jobs succeeded at e428678. i386/amd64 immutable images passed
+1 GiB QEMU BIOS offline GUI, IA32/x64 UEFI GUI/MPD, disabled update and bounded
+display-failure/backend playback/report checks. ARM results are Pi OS rootfs
+build/render checks, with no physical firmware boot. Artifact links, exact run
+IDs, newer app-package fixes and outstanding gates are in PROGRESS.md.

@@ -1,0 +1,15 @@
+{
+  "measurementKind": "virtual machine smoke test",
+  "architecture": "i386",
+  "memoryMiB": 1024,
+  "biosOfflineNativeGui": true,
+  "uefiGuiAndSilentWavPlayback": true,
+  "mpdPlaybackWithDisplayFailure": true,
+  "physicalHardware": false,
+  "boundedDisplayFailure": true,
+  "fatDiagnosticReport": true,
+  "performanceAcceptance": "not measured",
+  "audioQuality": "not measured",
+  "imageSourceCommit": "e428678956dae31b0a1a45946a17177c8e4c045e",
+  "workflowRun": "https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906015607"
+}

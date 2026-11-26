@@ -53,10 +53,10 @@ commits pushed only to BASF2HD/PiTunes-Native/main; no original remote here.
   ownership leaks reviewed, not claimed warning-free. Linux profiling remains.
 - One measured 10-second Mac offscreen demo sample: 54.55 MiB maximum process RSS,
   no audio/API load; docs/benchmarks/macos-demo-process.json. No target comparison.
-- Four architecture package CI at bc6b201 passed, including DEB installation and
-  raster PNG: [run 45905654870](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45905654870).
-  ARM package execution uses QEMU userspace, not physical Pi hardware. Latest SVG
-  follow-up has passed locally; its architecture CI is tracked below when observed.
+- Final architecture CI at 656eb46 passed all five jobs: backend and all four
+  packages, including the 17-case Qt suite, DEB installation and raster PNG:
+  [run 45906727236](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906727236).
+  ARM package execution uses QEMU userspace, not physical Pi hardware.
 
 ## Image and boot evidence
 
@@ -67,9 +67,9 @@ just for ordinary UI changes. No stable release or native OTA was published.
 | Target | Image build | VM boot | Physical boot |
 |---|---|---|---|
 | amd64 | [45903207496](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45903207496) succeeded | Enhanced [45905118978](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45905118978) succeeded | None |
-| i386 | [45904926832](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904926832) succeeded | [45906015607](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906015607) running | None |
-| armhf | [45904928762](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904928762) running | Not Pi firmware validation | None |
-| arm64 | [45904930633](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904930633) built, uploading | Not Pi firmware validation | None |
+| i386 | [45904926832](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904926832) succeeded | [45906015607](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906015607) succeeded | None |
+| armhf | [45904928762](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904928762) succeeded | Not Pi firmware validation | None |
+| arm64 | [45904930633](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904930633) succeeded | Not Pi firmware validation | None |
 
 amd64 image includes Debian 13 BIOS/x64 UEFI, installed native package, no browser,
 removed build tools, rootfs demo PNG, nginx/bootloader checks and verified xz/SHA.
@@ -77,7 +77,9 @@ Artifact 15157350867 (~1.35 GB ZIP) contains pitunes-native-amd64.img.xz, checks
 and build label. Enhanced smoke used a 1 GiB QEMU guest: no-NIC BIOS native GUI/OCR,
 x64 UEFI native GUI, MPD silent-WAV elapsed playback, disabled OTA, observed bounded
 LightDM failure, continuing MPD playback after display failure and extracted FAT
-diagnostic report. VM screenshots inspected. This establishes neither DAC output
+diagnostic report. Both PC image smoke suites passed, including i386 BIOS/IA32 UEFI at
+[45906015607](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906015607).
+Both architectures' VM screenshots were inspected. This establishes neither DAC output
 quality nor physical responsiveness, RAM targets or a Chromium performance gain.
 
 ## Lessons from actual failures
@@ -110,3 +112,21 @@ scan, touch, offline media, NAS/network/receivers and power-loss recovery remain
 release gates. Target hardware is unavailable here; GitHub root Linux builds and
 PC VM tests are available and have been used. Do not publish production images or
 enable native OTA before those gates pass.
+
+## Development image artifacts
+
+All four are e428678 source, developmental, with no physical boots. Each artifact
+contains a compressed image, SHA-256 and build label. GitHub retention applies.
+
+| Target | Artifact | ZIP bytes |
+|---|---|---|
+| i386 | [15157039425](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904926832/artifacts/15157039425) | 1,151,405,441 |
+| amd64 | [15157350867](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45903207496/artifacts/15157350867) | 1,347,089,797 |
+| armhf | [15158406009](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904928762/artifacts/15158406009) | 1,123,920,201 |
+| arm64 | [15156994546](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904930633/artifacts/15156994546) | 1,115,439,553 |
+
+Both Pi builders verified official base digests, compiled/installed the native DEB
+in the Pi OS rootfs and passed the no-browser/offscreen software-render check.
+Their firmware boot, HATs and displays remain untested. Inherited Pi build output
+still mentions a Chromium splash and legacy publish command; these are stale log
+messages, not installed browser packages or authorization to publish a release.

@@ -33,14 +33,17 @@ conflicts/corruption refuse without changing disk. Real HTTP tests exercise list
 import, disabled update status and oversized-body rejection before reading it.
 
 GitHub-hosted CI built/tested/installed all four architecture packages and rendered
-software PNGs at bc6b201 ([run 45905654870](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45905654870)).
-Later SVG compatibility changes have passed the local suites; their CI is tracked
-in PROGRESS. Generated image candidates remain at e428678, before those UI fixes.
+software PNGs at final runtime source 656eb46, including the SVG compatibility
+regression ([run 45906727236](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906727236)).
+All five jobs succeeded. Generated image candidates remain at e428678, before
+those UI fixes.
 
-The amd64 disk image passed 1 GiB QEMU BIOS offline GUI/OCR and x64 UEFI GUI/MPD
-silent-WAV elapsed playback. The enhanced failure test observed bounded failed
+Both i386 and amd64 disk images passed 1 GiB QEMU BIOS offline GUI/OCR and
+IA32/x64 UEFI GUI/MPD silent-WAV elapsed playback. The enhanced failure test observed bounded failed
 LightDM state, continuing MPD playback, and extracted the FAT diagnostic report
 ([run 45905118978](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45905118978)).
-VM screenshots were inspected. This is no physical firmware, DAC listening,
-touch, receiver transition, power-loss or target performance acceptance. See
+[i386 run 45906015607](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45906015607)
+passed the same enhanced suite. Both VM screenshot sets were inspected. This is
+no physical firmware, DAC listening, touch, receiver transition, power-loss or
+target performance acceptance. See
 PROGRESS for the other image and VM test results. No physical native boots exist.

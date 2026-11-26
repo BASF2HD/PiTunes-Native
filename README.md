@@ -9,8 +9,9 @@ The local application uses QPainter raster graphics. No embedded browser or
 mandatory OpenGL renderer is used.
 
 **Development status:** first native client; full feature parity and hardware
-acceptance are in progress. There are no validated native OS downloads or enabled
-native OTA updates. Original PiTunes releases are not native images.
+acceptance are in progress. All four development images have built; both PC
+images passed BIOS/UEFI QEMU smoke tests. Physical hardware acceptance and native OTA remain unavailable.
+Original PiTunes releases are not native images.
 
 ## Run on macOS
 
@@ -53,14 +54,17 @@ physical hardware validation.
 
 | Image | Base | Validation |
 |---|---|---|
-| i386 | Debian 12 minimal, BIOS / IA32 UEFI | Native image not yet boot-tested |
-| amd64 | Debian 13 minimal, BIOS / x64 UEFI | Native image not yet boot-tested |
-| armhf | Raspberry Pi OS Lite Bookworm, Zero 2 W / Pi 3 | Native image not yet boot-tested |
-| arm64 | Raspberry Pi OS Lite Bookworm, Pi 4 / Pi 5 | Native image not yet boot-tested |
+| i386 | Debian 12 minimal, BIOS / IA32 UEFI | Built; 1 GiB BIOS/IA32 UEFI VM smoke passed |
+| amd64 | Debian 13 minimal, BIOS / x64 UEFI | Built; 1 GiB BIOS/x64 UEFI VM smoke passed |
+| armhf | Raspberry Pi OS Lite Bookworm, Zero 2 W / Pi 3 | Built; physical Pi boot untested |
+| arm64 | Raspberry Pi OS Lite Bookworm, Pi 4 / Pi 5 | Built; physical Pi boot untested |
 
 macOS development builds run on the Mac only. Linux packages and disk images
 must be built for their own architecture. Image builds are manual development
 artifacts, never automatically published stable releases.
+[Development artifact links and exact source/test evidence](docs/PROGRESS.md)
+are recorded separately from the newer application package fixes. No physical
+native boots or target performance improvements are claimed.
 
 ## Engineering knowledge
 

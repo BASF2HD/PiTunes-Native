@@ -40,7 +40,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Update status/log/progress/rollback | original source updater; Pi A/B gated | Native OTA intentionally disabled |
 | Fullscreen, low resolution, focus, touch keyboard | browser UI | Native fullscreen/F11/in-dialog keyboard; 800x480 and 480x800 screenshots checked; complete focus/IME pending |
 | Persistent preferences/browse context | JSON/SQLite/localStorage/context | Safe preference import exists; native application/context publishing/following pending |
-| Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; amd64 1 GiB offline/UEFI/failure QEMU tests passed; physical boot pending |
+| Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; i386/amd64 1 GiB offline/UEFI/failure QEMU tests passed; physical boot pending |
 | Remote web controls/browser output | frontend/nginx | Source retained at existing paths |
 | Four bootable architecture images | Pi OS ARM, Debian x86 | Four staging paths tested; independent package CI/manual image workflow added; PC VM evidence and current image-build results in PROGRESS; no physical native boots |
 | Branding, logo/favicon/radio art | Original assets | Original black-and-white splash logo and icon in native resources; remote placeholders retained |
