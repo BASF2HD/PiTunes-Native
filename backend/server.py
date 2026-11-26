@@ -735,6 +735,7 @@ def compat_player_state():
             "file": song.get("file", ""),
             "Time": song.get("duration", 0),
             "albumId": song.get("albumId") or song.get("album_id") or "",
+            "year": song.get("year") or "",
         },
     }
     return _with_ui_context(payload)
@@ -1507,7 +1508,14 @@ def rebuild_art_cache():
 
 
 def post_json(handler):
-    length = int(handler.headers.get("Content-Length", "0"))
+    try:
+        length = int(handler.headers.get("Content-Length", "0"))
+    except ValueError as exc:
+        raise ApiError(400, "Invalid Content-Length") from exc
+    if length < 0:
+        raise ApiError(400, "Invalid Content-Length")
+    if length > 2 * 1024 * 1024:
+        raise ApiError(413, "JSON request exceeds 2 MiB")
     if length == 0:
         return {}
     raw = handler.rfile.read(length)
@@ -2005,6 +2013,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_file(icon_path, cache_control="max-age=86400")
             elif parsed.path == "/api/library/playlists":
                 self.send_json(compat_playlists())
+            elif parsed.path == "/api/library/smart-playlists":
+                self.send_json({"smartPlaylists": lib_userdata.list_smart_playlists()})
             elif parsed.path.startswith("/api/library/playlists/") and parsed.path.endswith("/tracks"):
                 playlist_id = parsed.path[len("/api/library/playlists/") : -len("/tracks")]
                 self.send_json(compat_playlist_tracks(unquote(playlist_id)))
@@ -2084,6 +2094,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(post_favourites(post_json(self)))
             elif parsed.path == "/api/library/playlists":
                 self.send_json(post_create_playlist(post_json(self)))
+            elif parsed.path == "/api/library/smart-playlists/import":
+                try:
+                    self.send_json(lib_userdata.import_browser_data(post_json(self)))
+                except ValueError as exc:
+                    raise ApiError(400, str(exc)) from exc
             elif parsed.path == "/api/library/playlists/tracks":
                 self.send_json(post_playlist_add_track(post_json(self)))
             elif parsed.path == "/api/library/radio/stations":

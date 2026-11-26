@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PiTunes browser data export</title>
+<style>body{background:#000;color:#eee;font:18px system-ui;max-width:650px;margin:10vh auto;padding:24px;line-height:1.5}button{font:inherit;padding:14px;border:1px solid #888;background:#181818;color:#fff;border-radius:8px}a{color:#ddd}</style>
+<h1>Keep your PiTunes smart playlists</h1>
+<p>Open this page in the same browser and at the same PiTunes address that holds your playlists. Download a copy before replacing or erasing the old installation.</p>
+<p>The export contains smart playlist definitions and PiTunes viewing preferences. It leaves your browser data unchanged.</p>
+<button id="export">Download browser data</button><p id="status" role="status"></p>
+<p>In PiTunes Native, open Settings → Library → Import browser data. Native rule playback is still being migrated; imported definitions are preserved.</p>
+<script>
+document.getElementById('export').addEventListener('click', () => {
+  const status = document.getElementById('status');
+  try {
+    const smartPlaylists = JSON.parse(localStorage.getItem('pitunes-smart-playlists') || '[]');
+    if (!Array.isArray(smartPlaylists)) throw new Error('Saved playlists are not a valid array. Nothing was changed.');
+    const keys = ['pitunes-output-route','pitunes-music-folder','pitunes-browse-state','pitunes-browser-repeat-mode','pitunes-browser-shuffle','pitunes-album-info-font-scale','pitunes-browse-sort-default-year-desc-v1'];
+    const preferences = Object.fromEntries(keys.map(key => [key, localStorage.getItem(key)]).filter(([,value]) => value !== null));
+    const blob = new Blob([JSON.stringify({schemaVersion:1,product:'PiTunes',smartPlaylists,preferences}, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = 'pitunes-browser-data.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    status.textContent = `Exported ${smartPlaylists.length} smart playlist definitions. Keep this file with your backup.`;
+  } catch (error) { status.textContent = error.message; }
+});
+</script></html>

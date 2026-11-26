@@ -18,3 +18,17 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Native Qt dependencies
+
+The native application dynamically links Qt 5 Core, GUI, Widgets, Network,
+Concurrent, SVG and Test (tests only), under LGPLv3/GPL/commercial licenses as
+applicable. PiTunes' MIT license does not relicense Qt. See
+https://www.qt.io/licensing/open-source-lgpl-obligations and
+https://code.qt.io/cgit/qt/qtbase.git/tree/LICENSE.LGPL3?h=5.15.
+Distributions must retain Qt notices, corresponding-source availability and the
+ability to replace/relink LGPL libraries. No static Qt build is shipped here.
+
+The remote interface retains original Three.js (MIT) and GSAP vendor headers.
+Review their exact bundled-version licensing before publishing images; retaining
+headers alone is not a completed third-party distribution audit.

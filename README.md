@@ -1,386 +1,76 @@
-<div align="center">
+# PiTunes Native
 
-<a href="https://github.com/BASF2HD/PiTunes">
-  <img src="docs/assets/pitunes-logo.png?v=5" alt="PiTunes" width="560">
-</a>
+![PiTunes](frontend/assets/pitunes-logo-splash.png)
 
-# PiTunes
+A native C++17 / Qt 5 Widgets evolution of
+[PiTunes](https://github.com/BASF2HD/PiTunes), preserving its MPD/ALSA audio engine,
+Python API, SQLite library, remote web interface and classic CoverFlow identity.
+The local application uses QPainter raster graphics. No embedded browser or
+mandatory OpenGL renderer is used.
 
-*Lightweight music player with CoverFlow and internet radio for Raspberry Pi, with a bootable USB preview for Intel and AMD PCs.*
+**Development status:** first native client; full feature parity and hardware
+acceptance are in progress. There are no validated native OS downloads or enabled
+native OTA updates. Original PiTunes releases are not native images.
 
-**Website:** [basf2hd.github.io/PiTunes](https://basf2hd.github.io/PiTunes)
+## Run on macOS
 
-</div>
-
-![PiTunes CoverFlow player preview](docs/assets/pitunes-player-gui.png)
-
-PiTunes is a lightweight Raspberry Pi music player appliance: local library playback with a CoverFlow-style UI, **AirPlay** and **Bluetooth** audio input, DAC-friendly output, SMB music sharing, and captive-portal WiFi setup — all on **Raspberry Pi OS Lite** with no cloud dependency.
-
-Built for **Pi 3, Pi 3 B+, Pi 4, Pi 5, and Pi Zero 2 W** on **Raspberry Pi OS Lite (Bookworm)** — official **32-bit** and **64-bit** images.
-
-## Download
-
-### Raspberry Pi
-
-PiTunes publishes separate flashable images from the same **Raspberry Pi OS Lite** base (pinned in `image/build.env`):
-
-| Your Pi | OS | Release asset |
-|---------|-----|----------------|
-| Pi 3, Pi 3 B+, Pi Zero 2 W | 32-bit Lite (`armhf`) | [`pitunes-armhf.img.xz`](https://github.com/BASF2HD/PiTunes/releases/latest/download/pitunes-armhf.img.xz) |
-| Pi 4, Pi 5 | 64-bit Lite (`arm64`) | [`pitunes-arm64.img.xz`](https://github.com/BASF2HD/PiTunes/releases/latest/download/pitunes-arm64.img.xz) |
-
-A legacy alias [`pitunes.img.xz`](https://github.com/BASF2HD/PiTunes/releases/latest/download/pitunes.img.xz) may point at the 32-bit build on older releases.
-
-**Build your own** on Debian/Ubuntu Linux:
-
-```bash
-sudo apt install qemu-user-static binfmt-support kpartx rsync wget xz-utils
-chmod +x install.sh configure-mpd.sh scripts/*.sh tools/*.sh
-
-# 32-bit Raspberry Pi OS Lite — Pi 3 / Pi Zero 2 W
-sudo ./tools/build-flashable-image.sh --arch armhf
-
-# 64-bit Raspberry Pi OS Lite — Pi 4 / Pi 5
-sudo ./tools/build-flashable-image.sh --arch arm64
+```sh
+brew install cmake ninja qt@5 python@3.12
+cmake --preset debug -DCMAKE_PREFIX_PATH="$(brew --prefix qt@5)"
+cmake --build --preset debug
+ctest --preset debug
+python3.12 tools/mock-server.py
+# In another terminal, from this repository:
+build/debug/pitunes-native --api http://127.0.0.1:8095
 ```
 
-Output: `image/out/pitunes-armhf.img.xz` or `image/out/pitunes-arm64.img.xz`. Full guide: [docs/IMAGE_CREATION.md](docs/IMAGE_CREATION.md).
+The inherited mock API supplies demonstration artwork/playback state; it produces
+no audio. For an explicitly offline visual demo use
+`build/debug/pitunes-native --demo`. API failure is shown as an error and retried;
+it never silently substitutes demo playback. Use `--fullscreen`, F11, or
+`--reduced-motion`. Python >=3.10 is required; system Python 3.9 is insufficient.
 
-Flash with Raspberry Pi Imager (**Use custom**), Balena Etcher, or `dd`, then boot the Pi and open:
+## Runtime boundary
 
 ```text
-http://pitunes.local
+Local Qt Widgets client -> loopback HTTP API -> MPD -> ALSA -> DAC
+Remote web browser ----> nginx ------------> same API
+                                Python -> SQLite + JSON user data
 ```
 
-Image downloads are published through GitHub Releases after the build completes. See [docs/DOWNLOADS.md](docs/DOWNLOADS.md).
-
-### Intel and AMD PC USB Preview
-
-| Your PC | Base OS | Image |
-|---------|---------|-------|
-| 64-bit Intel or AMD | Debian 13.8 | [`pitunes-amd64.img.xz`](https://github.com/BASF2HD/PiTunes/releases/download/pc-v1.4.4-preview.1/pitunes-amd64.img.xz) |
-| 32-bit Intel or AMD with PAE and SSE3 | Debian 12 LTS | [`pitunes-i386.img.xz`](https://github.com/BASF2HD/PiTunes/releases/download/pc-v1.4.4-preview.1/pitunes-i386.img.xz) |
-
-1. Download the image and its matching SHA-256 file from the [PC preview release](https://github.com/BASF2HD/PiTunes/releases/tag/pc-v1.4.4-preview.1). Use the 64-bit image if your CPU supports it, even if your current Windows installation is 32-bit.
-2. Verify the checksum, then flash the image to a spare **8 GB or larger USB drive** with Balena Etcher. Flashing erases the selected USB drive.
-3. Plug it into the PC and choose the USB drive from the firmware boot menu. Use legacy BIOS mode or compatible UEFI with Secure Boot off.
-4. PiTunes opens full-screen without a login. Choose a music source in **Settings** or open **More > Radio**. Settings and playlists stay on the boot USB.
-
-No installation to the internal drive is required. Remove the USB after
-shutdown to boot your existing OS again. These builds are previews: both
-were tested in an emulator, and physical hardware testing is still pending.
-See the [PC USB guide](docs/PC_USB.md) for firmware, audio, and test details.
-
-## What you get
-
-- **MPD** for local file playback and queue control
-- **Python API** + **nginx** serving the web UI on port 80
-- **SQLite** library index for fast browse and full-text search
-- **Avahi** mDNS (`pitunes.local`) — works on your LAN without a cloud account
-- **Fullscreen HDMI display** (Chromium kiosk) on images built with the default display profile
-- Works **offline** once installed; optional WiFi hotspot for first-time setup
-
-## Features
-
-### Music library & playback
-
-- CoverFlow album browser (WebGL + GSAP slide animation)
-- Paginated album loading for large collections (thousands of albums)
-- Browse by **album, artist, composer, year, genre, rating**, or **all songs**
-- **Songs drawer** — tap a cover to open the track list, play a song, or favourite the album
-- **Favourites** for albums and tracks (starred library)
-- **Playlists** — create, add tracks, browse playlist contents
-- **Export music lists** from Settings: favourite songs, every track in favourite albums, and all or selected playlists in one CSV
-- **Smart playlists** (rule-based, stored in the browser)
-- **Internet radio** — search (Radio Browser), favourites, MPD stream playback ([docs/RADIO.md](docs/RADIO.md))
-- Full-text **search** across the library
-- Transport controls: play, pause, stop, next, previous, seek, volume
-- **Repeat Off / All / Song** and **Shuffle** at the cover's left/right edges above the player. Official Lucide icons are gray when off and white when on, without circular backgrounds.
-- MPD outputs (DAC, USB, HDMI, headphone jack) use native `repeat`, `single`, and `random` options; optional browser output uses its own playback order and saved preferences. Repeat All covers the full album or playlist even when starting midway, and manual Next still skips in Repeat Song. Library ordering, audio formats, and output quality are unchanged. Radio and wireless-input playback do not use these controls.
-- **Now playing** view with album art and progress bar
-- Library **rescan** and artwork **cache rebuild**
-- Folder artwork (`folder.jpg`, `cover.jpg`, `album.jpg`, `front.jpg`, PNG/JPEG variants)
-- Embedded art via MPD `readpicture` when available
-- Thumbnail cache at **128px** and **420px**
-- Incremental background scan (`python3-mutagen`)
-- Supported formats include MP3, FLAC, M4A/AAC, OGG, Opus, WAV, AIFF, ALAC
-
-### Export music lists
-
-Open **Settings → Export music lists** and select favourite songs, favourite albums, and/or playlists. Choose all playlists or individual ones, then download a UTF-8 CSV. Each song appears once even if it belongs to multiple selections; album and playlist memberships and playlist positions remain visible in their own columns.
-
-The CSV includes title, artist, album, year, genre, composer, track number, duration, format, bitrate, exact `file_name`, `file_extension`, and `relative_path`. It also has favourite-song and favourite-album flags, selection sources, PiTunes song ID, and blank `keep` and `notes` columns for curation. Use the filename and path columns to match the selected songs in Finder, Windows Explorer, or a spreadsheet. Export runs in your browser and does not change the library or playlist data.
-
-### Music storage
-
-- USB drive auto-mount (partition label `MUSIC`)
-- Internal fallback folder: `/var/lib/pitunes/music`
-- Copy music directly to `/mnt/music`
-- **SMB / NFS NAS** mount from Settings (configure server, share, credentials)
-- **Samba share** of `/mnt/music` for adding music from Mac/PC on the LAN
-- udev-triggered remount when a USB drive is plugged in
-
-### Audio output
-
-- Routes: **USB DAC**, **DAC HAT**, **HDMI**, **3.5 mm headphones**
-- Large built-in **DAC HAT** list (HiFiBerry, IQaudio, Allo, JustBoom, official Pi DAC, and more)
-- Live **ALSA device list** in Settings
-- MPD mixer: hardware or software depending on route
-- `configure-mpd.sh` and `apply-audio-output.sh` for boot-time routing
-
-### Wireless audio input
-
-- **AirPlay** receiver (`shairport-sync` + `nqptp`) — stream from iPhone, iPad, Mac
-- **Bluetooth A2DP sink** (`bluealsa`) — pair a phone and play audio to the Pi
-- Advertised on the network as **PiTunes** (Avahi / Bluetooth discoverable)
-- Enable or disable AirPlay, Bluetooth, and related helpers from **Settings → Services**
-- Now-playing artwork for AirPlay and Bluetooth sessions in the UI
-
-### Network & setup
-
-- **WiFi hotspot** when no Ethernet or home WiFi — SSID `PiTunes`, gateway `172.24.1.1`
-- WiFi **scan and connect** from Settings (NetworkManager)
-- **SSH** service toggle from Settings
-- Hostname **`pitunes`** with `pitunes.local` mDNS
-
-### Display & touch
-
-- Fullscreen **kiosk** UI on HDMI (`pitunes-display.service` + Chromium)
-- Touch-friendly layout, on-screen **keyboard** for WiFi fields
-- Player **fullscreen** mode in the browser
-- Browse position and filters **persist** across reloads (localStorage)
-
-### System
-
-- Settings: music folder picker, audio output, WiFi, NAS, service toggles
-- **Reboot** and **shutdown** from Settings
-- Appliance **self-test** script: `sudo /opt/pitunes/scripts/appliance-self-test.sh`
-- Stable **app-only OTA** with release validation, health checks, logs, and automatic rollback
-- Flashable **`.img` / `.img.xz`** build pipeline and GitHub Actions workflow
-- Golden-image cleanup for cloning SD cards
-
-## Hardware target
-
-| Model | Recommended image |
-|-------|-------------------|
-| Pi 3, Pi 3 B+, Pi Zero 2 W | **32-bit** Raspberry Pi OS Lite (`armhf`) |
-| Pi 4, Pi 5 | **64-bit** Raspberry Pi OS Lite (`arm64`) |
-
-Both are built from the same Bookworm Lite base URLs in `image/build.env` (not the full desktop OS).
-- USB DAC, HDMI, headphone jack, or supported DAC HAT
-- Music on USB (`MUSIC` label), NAS, Samba copy, or `/mnt/music`
-- SD card sized for OS, artwork cache, and any local music
-
-## Project layout
-
-```text
-backend/                 Local Python API (MPD, SQLite library, network, storage)
-backend/library/         Scanner, queries, artwork resolver, userdata (favourites/playlists)
-frontend/                CoverFlow web UI (HTML/CSS/JS, Three.js, GSAP)
-systemd/                 Boot services (API, mount, hotspot, display, Bluetooth, …)
-nginx/                   Web server and API reverse proxy
-config/                  Versioned appliance defaults (WiFi, Samba, DAC HATs)
-scripts/                 Installed runtime and on-device maintenance commands
-tools/                   Build, release, local-development, and asset commands
-tests/                   Automated checks
-docs/                    User and maintainer documentation
-install.sh               Full appliance installer
-configure-mpd.sh         MPD and ALSA output setup
-```
-
-## Install from Raspberry Pi OS Lite
-
-1. Flash Raspberry Pi OS Lite to an SD card.
-2. Boot the Pi and log in locally or by SSH.
-3. Copy this project folder to the Pi.
-4. Run:
-
-```bash
-cd PiTunes
-sudo chmod +x install.sh configure-mpd.sh scripts/*.sh
-sudo ./install.sh
-```
-
-Audio output examples:
-
-```bash
-sudo ./install.sh usb-dac
-sudo HAT_OVERLAY=hifiberry-dac ./install.sh dac-hat
-sudo ./install.sh hdmi
-sudo ./install.sh headphones
-```
-
-## Music library setup
-
-**USB (recommended)**
-
-1. Format a drive as FAT32, exFAT, NTFS, or ext4.
-2. Label the partition `MUSIC`.
-3. Copy your music library onto it.
-4. Plug into the Pi and reboot, or run:
-
-```bash
-sudo systemctl restart pitunes-mount.service
-```
-
-**NAS (Settings UI or API)**
-
-Configure SMB or NFS server, share name, and credentials — PiTunes mounts the share at `/mnt/music` and starts a library scan.
-
-**Samba import from a Mac/PC**
-
-The Pi shares `\\pitunes\Music` (guest read/write to `/mnt/music`) so you can drag music over the network.
-
-## Services
-
-| Service | Role |
-|---------|------|
-| `mpd.service` | Local file playback engine |
-| `pitunes-api.service` | Python API on `127.0.0.1:8080` |
-| `nginx.service` | Web UI and `/api` proxy on port 80 |
-| `pitunes-mount.service` | USB / NAS / internal music folder |
-| `pitunes-startup-scan.service` | Library scan when the DB is empty |
-| `pitunes-hotspot.service` | WiFi recovery AP when offline |
-| `pitunes-display.service` | HDMI Chromium kiosk |
-| `shairport-sync.service` | AirPlay receiver |
-| `bluealsa.service` + `pitunes-bluealsa-aplay.service` | Bluetooth A2DP sink |
-| `pitunes-bt-agent.service` | Bluetooth pairing agent |
-| `pitunes-bluetooth-discoverable.service` | Keeps Pi discoverable as PiTunes |
-| `avahi-daemon.service` | `pitunes.local` mDNS |
-| `smbd.service` | Samba music share |
-| `NetworkManager.service` | WiFi station + hotspot |
-| `ssh.service` | Remote shell (toggle in Settings) |
-| `pitunes-update.service` | Stable app-only OTA with rollback |
-
-Useful commands:
-
-```bash
-sudo systemctl status mpd pitunes-api nginx shairport-sync bluetooth
-sudo journalctl -u pitunes-api -n 100
-sudo /opt/pitunes/scripts/appliance-self-test.sh
-mpc status
-```
-
-Fix hostname on an older install:
-
-```bash
-sudo hostnamectl set-hostname pitunes
-sudo sed -i 's/^127\.0\.1\.1.*/127.0.1.1\tpitunes/' /etc/hosts
-sudo systemctl restart avahi-daemon nginx
-```
-
-## API summary
-
-The UI uses JSON endpoints under `/api/`. Highlights:
-
-**Library**
-
-- `GET /api/library/albums?offset=&limit=&filter=`
-- `GET /api/library/album/{id}/tracks`
-- `GET /api/library/artists|genres|years|composers`
-- `GET /api/library/tracks`
-- `GET /api/library/favourites`
-- `POST /api/library/favourites`
-- `GET|POST /api/library/playlists`
-- `GET /api/library/radio?scope=all|favourites`
-- `GET /api/library/radio/search?q=`
-- `POST /api/library/radio/stations` · `POST /api/library/radio/favourites`
-- `POST /api/player/radio/play`
-- `GET /api/library/scan-status`
-- `POST /api/library/rescan`
-- `POST /api/library/rebuild-cache`
-- `GET /api/search?q=`
-
-**Player**
-
-- `GET /api/player/state`
-- `POST /api/player/play|pause|next|previous|seek|volume|queue`
-
-**Network & storage**
-
-- `GET /api/network/wifi/status|scan`
-- `POST /api/network/wifi/connect`
-- `POST /api/network/hotspot/start|stop`
-- `GET /api/storage/network/status`
-- `POST /api/storage/network/configure`
-
-**System**
-
-- `GET /api/settings` · `POST /api/settings`
-- `GET /api/audio/devices` · `POST /api/audio/output`
-- `GET /api/services` · `POST /api/services/control`
-- `GET /api/filesystem/roots|browse`
-- `POST /api/system/control` (reboot / shutdown)
-- `GET /api/system/update/status|log`
-- `POST /api/system/update/check|apply`
-- `GET /api/health`
-
-Legacy MPD-style routes (`/api/play-album`, `/api/status`, `/api/art`, …) remain for compatibility.
-
-## WiFi hotspot
-
-If the Pi has no Ethernet and cannot join home WiFi, PiTunes starts a setup access point:
-
-| | |
-|---|---|
-| SSID | `PiTunes` |
-| Default password | `pitunesaudio` (change in `/etc/pitunes/wifi-hotspot.conf`) |
-| Web UI | http://172.24.1.1 or http://pitunes.local |
-
-Join the hotspot, open the URL, then connect to your network in **Settings** or via:
-
-```bash
-sudo /opt/pitunes/scripts/setup-wifi.sh "SSID" "PASSWORD" GB
-```
-
-Details: [docs/WIFI_HOTSPOT.md](docs/WIFI_HOTSPOT.md).
-
-## Test without a Raspberry Pi
-
-```bash
-python tools/mock-server.py
-```
-
-Open `http://127.0.0.1:8095` — responsive mode exercises phone, landscape, and settings layouts. See [docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md).
-
-## Create a flashable image
-
-Version **1.4.3** adds numeric totals to browse menu headers and removes
-secondary descriptions from dropdown choices. Song totals follow the full
-library or favourite selection, including when grouped by album.
-Tagged releases publish automatically after both images pass the automated
-checks and finish uploading. No draft release is created. The latest download
-links then serve the new release; its notes distinguish automated checks from
-physical Raspberry Pi boot, audio, and OTA rollback testing.
-
-Follow [docs/IMAGE_CREATION.md](docs/IMAGE_CREATION.md). Publish a release asset:
-
-```bash
-./tools/publish-image-release.sh v1.4.3 image/out/pitunes-armhf.img.xz
-```
-
-## Updates and maintenance
-
-Stable devices update PiTunes application files from versioned GitHub Releases, never directly from `main`. Normal OTA does not upgrade Raspberry Pi OS. See [docs/UPDATES.md](docs/UPDATES.md) and [docs/AB_SYSTEM_UPDATES.md](docs/AB_SYSTEM_UPDATES.md) for rollback and system-update policy, and [docs/MAINTENANCE.md](docs/MAINTENANCE.md) for repository ownership and release rules.
-
-Run the read-only release checks before publishing:
-
-```bash
-./tools/validate-release.sh v1.4.3
-```
-
-## Troubleshooting
-
-[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — USB DAC, DAC HAT, WiFi, hotspot, MPD, artwork, NAS, AirPlay, Bluetooth, and mount issues.
-
-## Performance notes
-
-- No Docker, no desktop environment, no frontend build step
-- MPD handles playback only; SQLite handles browse/search metadata
-- nginx serves static files; Python API proxies MPD and serves cached art
-- CoverFlow animates on index changes (GSAP), not every frame
-- Thumbnail cache avoids resizing artwork repeatedly on Pi hardware
-
-## Roadmap
-
-Planned polish and v1.0 items: [docs/ROADMAP.md](docs/ROADMAP.md) (2D CoverFlow fallback, scan progress UI, published release checksums, and more).
+Qt owns presentation; MPD owns audio and queue lifetime. Native code does not
+write the library database. `frontend/` remains at its established installed path
+for remote browsers. Native devices must never launch Chromium.
+
+The client includes album paging/search, QPainter CoverFlow with perspective and
+cached reflections, mouse/wheel/keyboard/touch navigation, track lists, basic
+transport/seek/volume/repeat/shuffle, browse filters, favourites, playlist creation,
+radio playback, and initial appliance settings. Read the
+[parity tracker](docs/FEATURE_PARITY.md) for limitations; a visible control is not
+physical hardware validation.
+
+## Targets
+
+| Image | Base | Validation |
+|---|---|---|
+| i386 | Debian 12 minimal, BIOS / IA32 UEFI | Native image not yet boot-tested |
+| amd64 | Debian 13 minimal, BIOS / x64 UEFI | Native image not yet boot-tested |
+| armhf | Raspberry Pi OS Lite Bookworm, Zero 2 W / Pi 3 | Native image not yet boot-tested |
+| arm64 | Raspberry Pi OS Lite Bookworm, Pi 4 / Pi 5 | Native image not yet boot-tested |
+
+macOS development builds run on the Mac only. Linux packages and disk images
+must be built for their own architecture. Image builds are manual development
+artifacts, never automatically published stable releases.
+
+## Engineering knowledge
+
+Start with [AGENTS.md](AGENTS.md), [project context](docs/PROJECT_CONTEXT.md),
+[architecture audit](docs/ARCHITECTURE_AUDIT.md), [decisions](docs/ARCHITECTURE_DECISIONS.md),
+[known issues](docs/KNOWN_ISSUES.md) and [progress](docs/PROGRESS.md).
+[The full transfer](PITUNES_KNOWLEDGE_TRANSFER.md) pins the original engineering
+reference to `dd34c4635a523b8dabc40e976f2d7b11abf88885`.
+The original repository is strictly read-only. No unpublished source was imported.
+
+MIT for PiTunes source; see [LICENSE](LICENSE) and
+[third-party notices](THIRD_PARTY_NOTICES.md). Qt retains its applicable license
+and distribution/source/relinking obligations.

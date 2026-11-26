@@ -1,3 +1,13 @@
+# PiTunes Native 0.1.0 development
+
+- Inherit audited dd34c46 source and permanent engineering knowledge.
+- Add C++17/Qt Widgets/QPainter client, bounded artwork, API adapter and tests.
+- Preserve remote web/audio/backend; add explicit browser smart-definition import.
+- Add native-only X11 session and four-target package/manual-image configurations.
+- Disable legacy native-incompatible updates/publication. No production release or physical native boot is claimed.
+
+## Original PiTunes history (reference)
+
 # Changelog
 
 ## [1.4.4] - 2026-11-15

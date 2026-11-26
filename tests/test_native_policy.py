@@ -12,6 +12,11 @@ spec.loader.exec_module(system)
 
 
 class NativePolicyTest(unittest.TestCase):
+    def test_memory_reports_available_column_instead_of_free(self):
+        output = "               total used free shared buff/cache available\nMem: 1.0Gi 200Mi 20Mi 10Mi 800Mi 700Mi\n"
+        with patch.object(system, "_run", return_value=subprocess.CompletedProcess([], 0, output, "")):
+            self.assertEqual(system._memory_usage()["available"], "700Mi")
+
     def test_native_api_never_checks_or_installs_a_release(self):
         with patch.object(system, "_remote_release", side_effect=AssertionError("network")), \
              patch.object(system, "_run", side_effect=AssertionError("subprocess")):

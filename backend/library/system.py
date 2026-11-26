@@ -111,7 +111,7 @@ def _memory_usage() -> dict[str, str]:
         if line.lower().startswith("mem:"):
             parts = line.split()
             if len(parts) >= 3:
-                return {"total": parts[1], "used": parts[2], "available": parts[3] if len(parts) > 3 else ""}
+                return {"total": parts[1], "used": parts[2], "available": parts[6] if len(parts) >= 7 else ""}
     return {}
 
 

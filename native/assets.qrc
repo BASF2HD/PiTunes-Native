@@ -1,0 +1,4 @@
+<RCC><qresource prefix="/brand">
+  <file alias="logo.png">../frontend/assets/pitunes-logo-splash.png</file>
+  <file alias="icon.png">../frontend/assets/pitunes-icon-192.png</file>
+</qresource></RCC>

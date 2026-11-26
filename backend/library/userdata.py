@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import threading
 import uuid
 from copy import deepcopy
@@ -22,6 +23,7 @@ _DEFAULT: dict[str, Any] = {
     "favouriteAlbums": [],
     "playlists": [],
     "radioStations": [],
+    "smartPlaylists": [],
 }
 
 
@@ -179,6 +181,71 @@ def set_favourite_album(album_id: str, starred: bool) -> None:
 def list_playlists() -> list[dict[str, Any]]:
     store = _load_unlocked()
     return deepcopy(store.get("playlists") or [])
+
+
+def list_smart_playlists() -> list[dict[str, Any]]:
+    with _LOCK:
+        return deepcopy(_load_unlocked().get("smartPlaylists") or [])
+
+
+def import_browser_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Explicit additive import. Preserve definitions verbatim and refuse conflicts.
+
+    No browser profile is read, no existing source data is deleted, and browser
+    output/music-source preferences are retained as migration data, never applied
+    automatically to the appliance's audio or mounts.
+    """
+    if not isinstance(payload, dict) or payload.get("schemaVersion") != 1:
+        raise ValueError("A schemaVersion 1 PiTunes browser export is required")
+    if payload.get("product") not in ("PiTunes", "PiTunes-Native"):
+        raise ValueError("The export is not a PiTunes browser export")
+    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > 1024 * 1024:
+        raise ValueError("Browser export exceeds 1 MiB")
+    definitions = payload.get("smartPlaylists")
+    if not isinstance(definitions, list) or len(definitions) > 1000:
+        raise ValueError("smartPlaylists must be an array of at most 1000 definitions")
+    seen = set()
+    for item in definitions:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+            raise ValueError("Every smart playlist requires its original string id")
+        if not isinstance(item.get("name"), str) or not item["name"].strip():
+            raise ValueError("Every smart playlist requires a name")
+        if item["id"] in seen:
+            raise ValueError("Duplicate smart playlist IDs in export")
+        seen.add(item["id"])
+        if not isinstance(item.get("rules", []), list) or len(item.get("rules", [])) > 128:
+            raise ValueError("Invalid smart playlist rule array")
+    preference_keys = {
+        "pitunes-output-route", "pitunes-music-folder", "pitunes-browse-state",
+        "pitunes-browser-repeat-mode", "pitunes-browser-shuffle", "pitunes-album-info-font-scale",
+        "pitunes-browse-sort-default-year-desc-v1",
+    }
+    preferences = payload.get("preferences", {})
+    if not isinstance(preferences, dict) or set(preferences) - preference_keys:
+        raise ValueError("Export contains unsupported preference keys")
+    with _LOCK:
+        # Unlike normal historical reads, never recover a corrupt store by
+        # overwriting it during migration. Keep the original bytes for recovery.
+        if _USERDATA_FILE.exists():
+            try:
+                original = json.loads(_USERDATA_FILE.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("User data is unreadable; repair or restore it before import") from exc
+            if not isinstance(original, dict):
+                raise ValueError("User data is not an object; import refused")
+        store = _load_unlocked()
+        current = {item["id"]: item for item in store.get("smartPlaylists", [])}
+        for item in definitions:
+            if item["id"] in current and current[item["id"]] != item:
+                raise ValueError("A different smart playlist already has ID " + item["id"])
+        added = [deepcopy(item) for item in definitions if item["id"] not in current]
+        store.setdefault("smartPlaylists", []).extend(added)
+        store["browserMigrationPreferences"] = deepcopy(preferences)
+        store["browserMigrationDigest"] = hashlib.sha256(encoded).hexdigest()
+        _save_unlocked(store)
+    return {"ok": True, "imported": len(added), "preserved": len(current),
+            "message": f"Saved {len(added)} smart playlist definitions. Existing browser data is unchanged. Native rule playback is still being migrated."}
 
 
 def create_playlist(name: str, track_ids: list[str] | str | None = None) -> dict[str, Any]:
