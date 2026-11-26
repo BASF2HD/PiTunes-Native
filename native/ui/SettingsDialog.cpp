@@ -115,7 +115,9 @@ SettingsDialog::SettingsDialog(ApiClient *api, QWidget *parent) : QDialog(parent
     connect(networks, QOverload<int>::of(&QComboBox::activated), this, [=](int) { ssid->setText(networks->currentText()); });
     button(network, "Scan Wi-Fi", [=] {
         api->get("/api/network/wifi/scan", [guard, networks, result](QJsonObject o, QString error) {
-            if (!guard) return; result(o, error); if (!error.isEmpty()) return;
+            if (!guard) return;
+            result(o, error);
+            if (!error.isEmpty()) return;
             networks->clear(); for (const auto &v : o["networks"].toArray()) networks->addItem(textValue(v.toObject()["ssid"]));
         }, 45000);
     });

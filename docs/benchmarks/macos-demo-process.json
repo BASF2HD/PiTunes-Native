@@ -1,0 +1,28 @@
+{
+  "measurementKind": "development-host macOS process sample",
+  "sourceCommit": "f5388760e0f3c347c47330d3b879d9be10d9938c",
+  "nativeCodeCommit": "d62db5b",
+  "date": "2026-11-26",
+  "host": {
+    "os": "macOS 27.2.1",
+    "architecture": "arm64",
+    "qt": "5.15.19",
+    "configuration": "Release"
+  },
+  "command": "/usr/bin/time -l env QT_QPA_PLATFORM=offscreen build/release/pitunes-native --demo --screenshot .cache/benchmark-frame.png --screenshot-delay 10000",
+  "scenario": "One fresh demo process; offscreen software rendering; no API/audio/artwork downloads; filesystem caches uncontrolled",
+  "realSeconds": 9.96,
+  "userCpuSeconds": 0.09,
+  "systemCpuSeconds": 0.01,
+  "maximumResidentBytes": 57196544,
+  "peakMemoryFootprintBytes": 22004528,
+  "pageFaults": 4,
+  "swaps": 0,
+  "limitations": [
+    "One run, development host only",
+    "Not an appliance/system RAM measurement",
+    "No original Chromium baseline",
+    "No target hardware boot/input/audio test",
+    "No CoverFlow animation frame-rate measurement"
+  ]
+}

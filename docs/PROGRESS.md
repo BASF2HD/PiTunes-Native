@@ -70,3 +70,18 @@ network/NAS/receiver behavior and power-loss recovery remain release gates.
 
 Never publish production images or enable native OTA yet. Continue through
 AGENTS.md and these docs; do not re-audit or modify the original repository.
+
+## First Linux CI observation and correction
+
+[Run 45902198098](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45902198098)
+at f538876 compiled and passed CTest for both amd64 (Qt 5.15.15/GCC 14) and
+i386 (Qt 5.15.8/GCC 12). Packaging then failed because CPack's shlib dependency
+scanner needs the `file` utility, absent in minimal containers. Added it to both
+package and image build dependencies. The backend job passed. Superseded ARM
+package and first amd64 image runs were cancelled to avoid repeating the same
+known packaging defect. A GNU misleading-indentation warning was also corrected.
+
+A real Cocoa Mac window was launched and captured successfully (beyond offscreen
+tests). A single 10-second offscreen demo process sample is recorded in
+docs/benchmarks/macos-demo-process.json: 54.55 MiB maximum process RSS, no audio/API
+load. It is not target system RAM, a Chromium comparison or appliance acceptance.

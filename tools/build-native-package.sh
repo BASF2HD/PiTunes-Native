@@ -8,7 +8,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends cmake ninja-build g++ make dpkg-dev ccache \
+apt-get install -y --no-install-recommends cmake ninja-build g++ make dpkg-dev file ccache \
   qtbase5-dev libqt5svg5-dev ca-certificates
 cmake -S "${source_dir}" -B "${work}/build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE="$(dpkg --print-architecture)" -DCMAKE_INSTALL_PREFIX=/usr/local \

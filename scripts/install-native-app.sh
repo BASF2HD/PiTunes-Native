@@ -7,7 +7,7 @@ set -euo pipefail
 source_dir="${1:?Source directory required}"
 work="$(mktemp -d /var/tmp/pitunes-native-build.XXXXXX)"
 trap 'rm -rf "${work}"' EXIT
-build_packages=(cmake ninja-build g++ make dpkg-dev qtbase5-dev libqt5svg5-dev)
+build_packages=(cmake ninja-build g++ make dpkg-dev file qtbase5-dev libqt5svg5-dev)
 new_packages=()
 for package in "${build_packages[@]}"; do
   if ! dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -qx 'install ok installed'; then
