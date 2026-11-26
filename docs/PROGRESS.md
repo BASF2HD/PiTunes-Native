@@ -101,3 +101,45 @@ A separate manual Native PC image smoke workflow reuses the inherited disposable
 QEMU machinery, with a 1 GiB guest, so an existing image artifact can be boot-tested
 without rebuilding it. Includes no-NIC BIOS GUI, UEFI GUI/silent WAV, disabled
 updates and backend playback while Xorg is intentionally unavailable. Not yet run.
+
+## Four-architecture package milestone verified
+
+[Run 45902512642](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45902512642)
+completed successfully for backend plus all four architecture package jobs at
+19e826e. Artifacts include .deb, checksums and exact build package manifests.
+These packages are application builds; image runtime-path checks were improved
+subsequently in e428678. Latest package CI additionally installs each .deb and
+renders a demo screenshot. New amd64 image candidate run 45903207496 is in progress.
+
+## Latest architecture runtime verification
+
+[Run 45903161166](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45903161166)
+at e428678 completed all five jobs successfully: backend plus i386, amd64, armhf
+and arm64. Each target compiled, passed the 14-case Qt suite, generated a DEB,
+verified the /usr/bin entry, installed it and rendered a software demo PNG.
+Artifacts contain package, screenshot, checksums and build dependency manifest.
+ARM results use QEMU userspace emulation, not physical Raspberry Pi hardware.
+
+## First native disk image built
+
+[Native amd64 image run 45903207496](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45903207496)
+completed successfully at e428678. Built Debian 13 BIOS/x64-UEFI disk image,
+compiled/installed native executable, removed build dependencies, verified no
+browser package, rendered the rootfs demo, checked nginx and bootloader files,
+verified xz integrity and generated SHA-256. Development artifact ID 15157350867
+(about 1.35 GB ZIP) includes pitunes-native-amd64.img.xz plus checksum/build label.
+This is not a stable release and was not called bootable merely because it built.
+[1 GiB VM smoke run 45904112664](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904112664)
+was dispatched against that immutable image artifact and is being followed.
+
+## First native VM boot/playback passed
+
+[Smoke run 45904112664](https://github.com/BASF2HD/PiTunes-Native/actions/runs/45904112664)
+passed against the e428678 amd64 image: 1 GiB VM, BIOS offline native GUI/OCR,
+UEFI native GUI and silent-WAV MPD elapsed playback, disabled native OTA, backend
+playback with forced Xorg failure configuration. This is a virtual-machine smoke
+result, not physical hardware/audio-quality/performance acceptance. Extended the
+failure test further to assert actual failed LightDM state and extract the FAT
+diagnostic report, rather than relying on fault injection alone; rerun pending.
+After this first working Linux target, dispatched i386/armhf/arm64 image builds
+from the same native implementation. No stable release/OTA was published.
