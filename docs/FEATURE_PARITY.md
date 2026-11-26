@@ -20,7 +20,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Seek / volume / duration / elapsed | MPD; volume -1 means no mixer | Native sliders/status implemented; mixed types/no-mixer tested |
 | Repeat Off/All/Song, shuffle | MPD single/repeat/random, radio rejection | Native controls; original semantic tests retained; real MPD pending |
 | Queue and now-playing metadata | MPD, per-track artist/album/year | Backend retained; queue UI pending |
-| Automatic next album without UI | idle watcher + backup poller | Retained; native must not duplicate |
+| Automatic next album without UI | idle watcher + backup poller | Backend retained; native must not duplicate. Native browse-context publication is still missing, so continuation sort/filter can differ |
 | Favourite songs / albums | userdata JSON, optimistic rollback | Basic native save/remove song and save album; album removal/optimistic UI pending |
 | Playlists create/add/browse/order | JSON trackIds, bulk one-write | Native create/browse/stored order; add-to-existing native UI pending |
 | Playlist rename/delete/remove/reorder | Absent in original | Requested extension pending |
@@ -29,20 +29,20 @@ with tests; do not mark entire groups complete after a screenshot.
 | Radio search/pagination/save/favourite/remove | Radio Browser proxy/JSON | Retained; native pending |
 | Radio MPD playback/errors/metadata | Streams/network dependent | Basic native search/saved-station playback; richer metadata/reconnect pending |
 | USB/internal folder source and remount | mount helper/udev | Retained; native picker pending |
-| SMB/NFS NAS setup/retry/rescan | NetworkManager/storage backend | Retained; native pending |
+| SMB/NFS NAS setup/retry/rescan | NetworkManager/storage backend | Retained; native NAS form implemented, mounting/recovery untested |
 | USB DAC, HDMI, analog, Pi I2S HAT | ALSA, overlays; known Pi gaps | Retained; capability UI/hardware pending |
 | Device/mixer selection and reboot warning | audio_output + helper | Native async form, hardware apply not tested |
-| AirPlay / Bluetooth receiver toggles | services/BlueALSA/Shairport | Retained; native pending |
+| AirPlay / Bluetooth receiver toggles | services/BlueALSA/Shairport | Native service toggles implemented; actual receivers untested |
 | Pairing / now-playing / source arbitration | Discoverability exists; missing manager | Existing gap; backend/native work pending |
 | Wi-Fi scan/connect, AP recovery, status | NetworkManager worker/cache | Native form/scan/hotspot controls, hardware handoff pending |
 | SSH / services, system/about | audited backend helpers | Native controls, services disabled state needs hardware verification |
 | Reboot / shutdown | delayed backend actions | Native confirmation and API request; not executed on hardware |
 | Update status/log/progress/rollback | original source updater; Pi A/B gated | Native OTA intentionally disabled |
 | Fullscreen, low resolution, focus, touch keyboard | browser UI | Native fullscreen/F11/in-dialog keyboard; 800x480 and 480x800 screenshots checked; complete focus/IME pending |
-| Persistent preferences/browse context | JSON/SQLite/localStorage/context | Migration pending |
-| Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; actual boot pending |
+| Persistent preferences/browse context | JSON/SQLite/localStorage/context | Safe preference import exists; native application/context publishing/following pending |
+| Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; amd64 1 GiB offline/UEFI/failure QEMU tests passed; physical boot pending |
 | Remote web controls/browser output | frontend/nginx | Source retained at existing paths |
-| Four bootable architecture images | Pi OS ARM, Debian x86 | Four staging paths tested; independent package CI/manual image workflow added; no native images booted |
+| Four bootable architecture images | Pi OS ARM, Debian x86 | Four staging paths tested; independent package CI/manual image workflow added; PC VM evidence and current image-build results in PROGRESS; no physical native boots |
 | Branding, logo/favicon/radio art | Original assets | Original black-and-white splash logo and icon in native resources; remote placeholders retained |
 
 Physical acceptance includes supported formats/metadata, long playback while

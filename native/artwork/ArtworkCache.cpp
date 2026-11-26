@@ -5,11 +5,35 @@
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QSvgRenderer>
 #include <QUrlQuery>
 #include <QtConcurrent>
 
 namespace PiTunes {
+static QByteArray compatibleSvg(const QByteArray &data) {
+    // The existing backend's virtual covers use CSS rgba(), which Qt 5 SVG Tiny
+    // treats as black. Express the same paint using SVG 1.1 color/opacity attrs.
+    const QString source = QString::fromUtf8(data);
+    static const QRegularExpression paint(QStringLiteral(
+        R"svg((fill|stroke)="rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*([0-9.]+)\s*\)")svg"));
+    QString converted; converted.reserve(source.size()); int offset = 0;
+    auto matches = paint.globalMatch(source);
+    while (matches.hasNext()) {
+        const auto match = matches.next();
+        converted += source.mid(offset, match.capturedStart() - offset);
+        const QColor color(qBound(0, match.captured(2).toInt(), 255), qBound(0, match.captured(3).toInt(), 255),
+                           qBound(0, match.captured(4).toInt(), 255));
+        converted += match.captured(1) + "=\"" + color.name() + "\" " + match.captured(1)
+            + "-opacity=\"" + QString::number(qBound(0., match.captured(5).toDouble(), 1.)) + "\"";
+        offset = match.capturedEnd();
+    }
+    converted += source.mid(offset);
+    // SVG Tiny lacks pattern fills. For the known generated placeholder only,
+    // retain its gradient and omit the optional dotted texture overlay.
+    if (source.contains("PiTunes STEREO")) converted.replace("fill=\"url(#p)\"", "fill=\"none\"");
+    return converted.toUtf8();
+}
 ArtworkCache::ArtworkCache(ApiClient *api, int budgetMiB, QObject *parent)
     : QObject(parent), m_api(api), m_cache(qBound(4, budgetMiB, 32) * 1024 * 1024) {
     m_edge = budgetMiB <= 6 ? 256 : 320;
@@ -37,7 +61,7 @@ Artwork ArtworkCache::decode(const QByteArray &data, int size) {
     const int edge = qBound(64, size, 420);
     QImage decoded;
     if (data.trimmed().startsWith('<')) {
-        QSvgRenderer svg(data);
+        QSvgRenderer svg(compatibleSvg(data));
         if (!svg.isValid()) return result;
         decoded = QImage(edge, edge, QImage::Format_ARGB32_Premultiplied); decoded.fill(Qt::transparent);
         QPainter painter(&decoded); svg.render(&painter);

@@ -199,6 +199,15 @@ private slots:
         for (int i = 0; i < 5000; ++i) cache.insert(QString::number(i), art);
         QVERIFY(cache.bytesUsed() <= cache.budgetBytes()); QVERIFY(!cache.find("0")); QVERIFY(cache.find("4999"));
     }
+    void backendSvgRgbaPaintRetainsItsColorAndAlpha() {
+        const QByteArray svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"128\" height=\"128\">"
+            "<rect width=\"128\" height=\"128\" fill=\"rgba(255,255,255,.86)\"/></svg>";
+        const auto artwork = ArtworkCache::decode(svg, 128);
+        QVERIFY(!artwork.cover.isNull());
+        const auto color = artwork.cover.pixelColor(64, 64);
+        QVERIFY(color.red() > 240 && color.green() > 240 && color.blue() > 240);
+        QVERIFY(color.alpha() >= 215 && color.alpha() <= 225);
+    }
     void artworkWorkIsBoundedAndDestructionSafe() {
         HttpFixture server; server.respond = [](QByteArray) { return HttpFixture::Response{"bad image", 60}; };
         ApiClient api(server.url()); auto *cache = new ArtworkCache(&api, 4);

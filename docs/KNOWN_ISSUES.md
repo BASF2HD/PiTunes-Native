@@ -26,7 +26,7 @@ Evidence inherited from dd34c46 and the transfer; no physical native testing yet
 | `free -h` available field wrong | Fixed in native adaptation with regression fixture | Target measurements still pending. |
 | Signed Pi A/B incomplete physical validation | Script tests only | Power-loss/watchdog/tryboot matrix, no PC A/B claim. |
 | Original workflows moving dependencies | PiShrink master, live Debian suites | Pin/verify base/toolchain inputs and record package manifests. |
-| Native images/hardware/performance | No evidence yet | Do not publish stable images or promised RAM/frame rates. |
+| Native images/hardware/performance | Development images and PC VM evidence in PROGRESS; no physical evidence | Do not publish stable images or promised RAM/frame rates. |
 
 Do not repeat: title-only grouping, per-singer albums, full-queue synchronous
 startup, queue resets during polls, stale async drawer results, continuous idle
@@ -39,15 +39,15 @@ video as the only display-failure test, or treating checksum/boot as usability.
 Native all-songs browse currently loads the first 200 entries; album paging is
 tested through 5,001 entries. Queue editor, complete playlist editing, native CSV
 save, smart rule evaluation/builder, radio paging/favourites, shared browse-context
-following, folder browsing, scan progress and complete preferences migration remain.
+publishing/following, folder browsing, scan progress and complete preferences migration remain.
 Settings forms compile but actual Linux privileges/receivers/mount/audio are not
 validated. On-screen keyboard currently covers Latin letters/punctuation, not a
 complete multilingual IME. Exact geometry/animation parity and physical touch
 acceptance are still open. Imported smart definitions are safe but not executed.
 
-Native image configurations/staging tests exist; no native image has been built
-or booted in this Mac session. Root Linux/loop devices, target DACs and target
-hardware are unavailable locally. Legacy builders/install/deploy/publication are
+Native images are built on GitHub-hosted root Linux; PC VM acceptance is recorded
+in PROGRESS. Target DACs and physical target hardware are unavailable. No physical
+boot or target resource acceptance is claimed. Legacy builders/install/deploy/publication are
 fail-closed unless invoked through the explicit native staging/build path.
 
 Low-memory artwork prefetch was reviewed for eviction loops: the desired window
@@ -59,3 +59,11 @@ Low-resolution keyboard/modal layouts need further QA with the keyboard open;
 the checked 800x480/480x800 screenshots cover the main player without that overlay.
 Generated e428678 image candidates precede the later stale-drawer/callback cleanup
 corrections; source/application-package validation is tracked separately.
+
+Qt 5 SVG Tiny does not support the backend placeholder's CSS rgba paints or
+pattern fills. The native artwork worker now adapts rgba to RGB/opacity (tested)
+and omits only the optional dotted texture of the known PiTunes generated cover.
+The existing backend/remote placeholder stays unchanged; exact native texture
+parity remains open. Native navigation does not yet publish shared browse context,
+so backend automatic continuation can use its default/previous remote sort and
+filter instead of the selected native view. Do not claim continuation context parity.

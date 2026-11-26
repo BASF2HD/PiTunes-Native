@@ -18,5 +18,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 | ADR-011 | Keep original release workflows under docs/reference, inactive | Original automatic `v*` Pi release would build Chromium and mark Latest. New CI separates app tests, architecture packages and manual image artifacts; no stable publication. |
 | ADR-012 | Separate native GUI recovery from MPD/API | Minimal X11 session, unprivileged GUI, bounded restarts; missing API/network shows a useful shell rather than blocking first paint. |
 
+| ADR-013 | Adapt generated SVG paints in the native artwork worker | Qt 5 SVG Tiny cannot render CSS rgba/patterns. Convert paint to RGB/opacity and omit only the known placeholder dotted overlay, keeping backend/remote output unchanged. |
+
 Do not infer approved native update, image or hardware support from these design
 decisions. Every target requires package, boot, input, audio and resource evidence.
