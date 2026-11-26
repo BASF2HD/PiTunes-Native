@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[[ -f "${ROOT}/config/.native-stage" ]] || { echo "Use tools/build-native-image.sh; legacy browser image entry point is disabled." >&2; exit 1; }
 ARCH=amd64
 OUTPUT=""
 while [ "$#" -gt 0 ]; do

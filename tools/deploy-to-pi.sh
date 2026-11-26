@@ -3,11 +3,14 @@
 # pitunes.local serves files from /opt/pitunes on the Pi — editing the Mac
 # repo alone does NOT update what you see in the browser until you run this.
 #
-# Usage: SSHPASS='PiTunes' tools/deploy-to-pi.sh
+# Legacy web deployment. Native requires a target-matched package.
 set -euo pipefail
 
+echo "Native publication/deployment/OTA requires independent validation; this legacy entry point is disabled." >&2
+exit 1
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PI_HOST="${PI_HOST:-pi@192.168.1.126}"
+PI_HOST="${PI_HOST:?Specify an explicit staging host; no default destination is stored}"
 REMOTE_ROOT="${REMOTE_ROOT:-/opt/pitunes}"
 STAGING="/tmp/pitunes-deploy-$$"
 SSH_OPTS=(-o StrictHostKeyChecking=no)

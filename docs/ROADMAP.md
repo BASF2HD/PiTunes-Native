@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # PiTunes Roadmap
 
 PiTunes is a lightweight Raspberry Pi music player OS with local music playback, CoverFlow-style browsing, AirPlay input, Bluetooth audio input, and DAC-friendly output.

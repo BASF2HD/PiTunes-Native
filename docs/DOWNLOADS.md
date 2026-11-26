@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # PiTunes Image Downloads
 
 PiTunes images are distributed as `.img.xz` files on [GitHub Releases](https://github.com/BASF2HD/PiTunes/releases). Raspberry Pi uses **Raspberry Pi OS Lite**. Intel and AMD PCs use separate **Debian** USB images.

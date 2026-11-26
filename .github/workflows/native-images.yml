@@ -1,0 +1,37 @@
+name: Native development disk image
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Architecture (development artifact; physical validation pending)
+        type: choice
+        required: true
+        options: [i386, amd64, armhf, arm64]
+permissions:
+  contents: read
+jobs:
+  image:
+    if: github.repository == 'BASF2HD/PiTunes-Native'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap fdisk dosfstools e2fsprogs patch rsync \
+            xz-utils debian-archive-keyring qemu-user-static binfmt-support kpartx parted curl wget
+      - name: Build native-only image
+        env:
+          ARCH: ${{ inputs.arch }}
+        run: sudo bash tools/build-native-image.sh "${ARCH}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitunes-native-${{ inputs.arch }}-development-${{ github.sha }}
+          path: |
+            image/out/pitunes-native-*.img.xz
+            image/out/pitunes-native-*.img.xz.sha256
+            image/out/pitunes-native-*.img.build.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

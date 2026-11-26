@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "Native publication/deployment/OTA requires independent validation; this legacy entry point is disabled." >&2
+exit 1
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 VERSION="${1:-}"
 IMAGE="${2:-}"
 ASSET_NAME="${3:-}"
-REPO="${GITHUB_REPOSITORY:-BASF2HD/PiTunes}"
+REPO="${GITHUB_REPOSITORY:-BASF2HD/PiTunes-Native}"
 
 if [ -z "${VERSION}" ] || [ -z "${IMAGE}" ]; then
   echo "Usage: ./tools/publish-image-release.sh v1.4.0 image/out/pitunes-armhf.img.xz [asset-name]"

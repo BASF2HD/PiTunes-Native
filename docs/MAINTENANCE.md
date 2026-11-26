@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # Maintainer Guide
 
 PiTunes is maintained as an appliance, not as a general-purpose Raspberry Pi installation. Changes must preserve playback, boot, network recovery, and local-display behavior.

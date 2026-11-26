@@ -1,44 +1,72 @@
 # Progress
 
-26 November 2026 — foundation in progress on main.
+26 November 2026 (Europe/London), main, native version 0.1.0 development.
 
-## Completed inheritance
+## Completed
 
-- Read all 1,267 lines of PITUNES_KNOWLEDGE_TRANSFER.md and the complete master
-  brief. Inspected the sibling original read-only, source history, active modules,
-  original image/workflow/test paths and visual reference.
-- Live GitHub main = original HEAD dd34c4635a523b8dabc40e976f2d7b11abf88885.
-  Compared all 174 tracked blob IDs with the live recursive tree; no mismatches.
-  Destination initial source matches those 174 files. No unpublished code.
-- Inspected live releases and successful original PC workflow 45865676142.
-- Initialized destination repository only; origin points to PiTunes-Native.
-- Added permanent instructions, inherited context, decisions, issues, parity and
-  source SHA-256 inventory. Archived original automatic image/release workflows
-  outside `.github/workflows` to prevent accidental Chromium publication.
+- Read the complete master brief and all 1,267 transfer lines. Audited original
+  local source read-only, Git history, live GitHub tree/releases/Actions,
+  documentation, API/store/scanner/audio/boot/build/test paths and visual baseline.
+- Original HEAD/live main dd34c4635a523b8dabc40e976f2d7b11abf88885. All 174 tracked
+  blob IDs and initial destination files match; no unpublished source imported.
+  Only original untracked file is the supplied transfer document. Original status
+  checked again after implementation: unchanged. SHA-256 inventory retained.
+- Foundation commit 86a5208 pushed successfully to BASF2HD/PiTunes-Native/main.
+  Native product/version/channel isolated, all native OTA paths fail closed before
+  networking or privileged work. No original remote was configured here.
+- Added AGENTS.md, inherited context/audit/decisions/issues/parity and current docs.
+  Original image/release workflows archived inactive, old docs explicitly labeled.
+- Implemented CMake/C++17 Qt 5 Widgets client, QPainter cover projection/reflections,
+  native input, time-based navigation stopping at idle, 5,001-album tested paging,
+  async same-origin API/error/timeout adapter, stale generation guards, virtual
+  track lists, transport/seek/volume/repeat/shuffle, filters/search, favourites,
+  playlist creation/browse, basic radio and async initial appliance settings.
+- Artwork cache is cost-bounded with two jobs, scaled worker decoding, rejected
+  corrupt/oversized inputs, revision URLs, cached reflections and a prefetch window
+  that fits its memory budget (regression-tested against idle eviction/refetch loops).
+- Explicit browser export/import preserves smart definitions and safe preferences
+  in existing userdata, without deleting browser data or executing unsupported
+  rules. Native builder/evaluator remains pending.
+- Added native X11/LightDM session and bounded systemd user GUI restarts, separate
+  from MPD/API. No root GUI. Original browser entry points disabled/replaced.
+- All four native source-staging/PC patch paths tested. Added independent pinned
+  architecture package CI and manually dispatched image workflow, source/checksum
+  manifests, official Pi compressed-base checksums, rootfs no-browser/raster checks.
+  Actual native images are not yet built or boot-tested.
+- Inspected Debian 12 Qt source rules: non-SSE2 baseline plus optional SSE2 libraries.
+  i386 app explicitly targets i686/x87, kernel still requires PAE. Whole-image
+  minimum CPU/graphics acceptance remains untested.
+- Fixed inherited MemAvailable report column with a regression fixture and retained
+  year metadata in native player state. Original audio/queue engine is retained.
 
-## Current work
+## Executed validation
 
-Implement native CMake/Qt client, bounded QPainter CoverFlow/artwork, API adapter,
-tests, native appliance session, independent build profiles and CI. macOS toolchain
-is installed (Qt 5.15.19, CMake 4.5.1, Ninja 1.13.2, Python 3.12.16).
-No native build/test/performance claim yet.
+- 31 Python tests passed; 24 JavaScript tests passed.
+- Debug and Release Mac arm64 compiled; CTest 13 substantive Qt cases passed
+  (15 QtTest results including initialization/cleanup).
+- Release validator + three historical updater/boot rollback shell suites passed.
+- Offscreen demo/mock screenshots inspected, including 800x480 and 480x800.
+- Clang built-in analyzer processed ten translation units; three possible closure
+  ownership/leak warnings reviewed as Qt lifetime-model limitations. Not claimed
+  warning-free; see VALIDATION.md. Linux allocator profiling remains pending.
+- Native image wrapper correctly refuses unsupported Mac execution.
+- High-confidence staged credential scanner and diff review required before commit.
 
-## Remaining and blockers
+## Current limitations / next work
 
-Full native parity, smart-playlist migration, architecture builds, real boot and
-physical audio/performance acceptance remain. This host is Apple Silicon macOS,
-not root Linux with loop mounts/systemd/MPD/DAC or the target hardware. Builds on
-macOS validate development only. No native production release or OTA is approved.
+See FEATURE_PARITY.md and KNOWN_ISSUES.md. Native all-songs browsing initially
+caps at 200. Queue editor, all-song paging, complete playlist edits, CSV export,
+smart builder/evaluator/playback, radio paging/favourites/reconnect presentation,
+folder browser, scan progress, shared remote context following, complete persisted
+preferences, touch focus/IME and detailed visual parity remain. Native settings
+forms require real hardware/privilege verification. GUI-failure diagnostics beyond
+existing X-server/FAT reports need an appliance health integration.
 
-Next session must read AGENTS and current project docs before changing code.
+This Mac has no root Linux loop mounts/systemd/MPD/DAC or target hardware. CI
+package artifacts are application validation, not Raspberry Pi firmware boots.
+No target performance numbers or physical native boots exist. Four image builds,
+BIOS/UEFI acceptance, actual 1 GB Atom/512 MB Zero 2 W resources, USB/HAT audio,
+network/NAS/receiver behavior and power-loss recovery remain release gates.
 
-## Foundation verification
-
-Inherited selected Python suite: 20 passed. JavaScript suite: 24 passed.
-Release source validator and all three shell updater/boot rollback suites passed
-under Python 3.12.16. Native update policy: 2 tests passed (no network/process
-actions; shell entry points refuse). Historical update algorithms are retained
-under explicit test-only patching of the native disable constant.
-Native version starts at 0.1.0 development, repository PiTunes-Native, OTA disabled.
-Staged-source high-confidence credential scan passed; source templates reviewed.
-Original workflows retained as inactive references. No native hardware tests.
+Never publish production images or enable native OTA yet. Continue through
+AGENTS.md and these docs; do not re-audit or modify the original repository.

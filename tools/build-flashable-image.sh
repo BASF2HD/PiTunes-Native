@@ -10,6 +10,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+[[ -f "${ROOT_DIR}/config/.native-stage" ]] || { echo "Use tools/build-native-image.sh; legacy browser image entry point is disabled." >&2; exit 1; }
 # shellcheck source=image/build.env
 source "${ROOT_DIR}/image/build.env"
 

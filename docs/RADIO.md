@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # Internet radio
 
 PiTunes includes built-in internet radio: browse saved stations, search a worldwide directory, favourite stations, and listen through **MPD** on your chosen audio output.

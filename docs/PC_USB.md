@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # PiTunes on Intel PCs
 
 Download the images and SHA-256 files from the

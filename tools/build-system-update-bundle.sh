@@ -2,6 +2,9 @@
 # Build and sign PiTunes A/B system-update release assets.
 set -euo pipefail
 
+echo "Native publication/deployment/OTA requires independent validation; this legacy entry point is disabled." >&2
+exit 1
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION=""
 ARCH=""

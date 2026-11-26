@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+NATIVE_SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "${NATIVE_SOURCE_ROOT}/config/.native-stage" ]] || {
+  echo 'Use the native image builder; direct legacy installation is disabled.' >&2; exit 1;
+}
+
 PROJECT_NAME="pitunes"
 INSTALL_DIR="/opt/${PROJECT_NAME}"
 CONFIG_DIR="/etc/${PROJECT_NAME}"

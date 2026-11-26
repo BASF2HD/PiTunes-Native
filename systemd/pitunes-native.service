@@ -1,0 +1,14 @@
+[Unit]
+Description=PiTunes Native local player
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+Environment=QT_QPA_PLATFORM=xcb
+ExecStart=/usr/local/bin/pitunes-native --fullscreen
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+RestrictSUIDSGID=true

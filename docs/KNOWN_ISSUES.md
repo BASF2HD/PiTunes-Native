@@ -23,7 +23,7 @@ Evidence inherited from dd34c46 and the transfer; no physical native testing yet
 | API trusted-LAN security limits | Unauthenticated privileged controls, no general CSRF/TLS/rate limits | Security review before public-network exposure; Qt does not fix this. |
 | Request/media bounds incomplete in old backend | Body size, URL proxy/SSRF, symlink/path risks | Track and test hardening without silently changing working contracts. |
 | Userdata atomicity corners | UI context direct write, multiple settings authorities | Crash/power-cut and concurrency fixtures needed. |
-| `free -h` available field wrong | Uses free column | Fix and test separately; never use for benchmark claims. |
+| `free -h` available field wrong | Fixed in native adaptation with regression fixture | Target measurements still pending. |
 | Signed Pi A/B incomplete physical validation | Script tests only | Power-loss/watchdog/tryboot matrix, no PC A/B claim. |
 | Original workflows moving dependencies | PiShrink master, live Debian suites | Pin/verify base/toolchain inputs and record package manifests. |
 | Native images/hardware/performance | No evidence yet | Do not publish stable images or promised RAM/frame rates. |
@@ -33,3 +33,24 @@ startup, queue resets during polls, stale async drawer results, continuous idle
 painting, network-online on display critical path, running Samba to read a NAS,
 blind apt upgrades in App OTA, timeout increases without logs, removing all VM
 video as the only display-failure test, or treating checksum/boot as usability.
+
+## Native milestone limitations
+
+Native all-songs browse currently loads the first 200 entries; album paging is
+tested through 5,001 entries. Queue editor, complete playlist editing, native CSV
+save, smart rule evaluation/builder, radio paging/favourites, shared browse-context
+following, folder browsing, scan progress and complete preferences migration remain.
+Settings forms compile but actual Linux privileges/receivers/mount/audio are not
+validated. On-screen keyboard currently covers Latin letters/punctuation, not a
+complete multilingual IME. Exact geometry/animation parity and physical touch
+acceptance are still open. Imported smart definitions are safe but not executed.
+
+Native image configurations/staging tests exist; no native image has been built
+or booted in this Mac session. Root Linux/loop devices, target DACs and target
+hardware are unavailable locally. Legacy builders/install/deploy/publication are
+fail-closed unless invoked through the explicit native staging/build path.
+
+Low-memory artwork prefetch was reviewed for eviction loops: the desired window
+is now bounded by cache capacity, and a valid-image regression test confirms
+requests stop at idle even with a 4 MiB cache. Decoder transient memory is bounded
+separately by two workers, source pixel ceiling and compressed byte limits.

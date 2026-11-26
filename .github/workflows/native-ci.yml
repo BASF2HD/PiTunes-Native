@@ -1,0 +1,55 @@
+name: Native application and backend
+on:
+  push:
+    branches: [main]
+    paths: ["native/**", "backend/**", "frontend/**", "scripts/**", "tools/**", "tests/**", "image/**", "config/**", "systemd/**", "CMake*", ".github/workflows/native-*.yml"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: ./tools/validate-release.sh
+      - run: python -m unittest tests.test_album_scanner_identity tests.test_music_export_queries tests.test_userdata_playlists tests.test_playback_modes tests.test_system_update tests.test_native_policy tests.test_native_staging tests.test_browser_migration tests.test_native_http -v
+      - run: node --test tests/*.test.mjs
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i386, amd64, armhf, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: actions/cache@v4
+        with:
+          path: .cache/ccache-${{ matrix.arch }}
+          key: native-ccache-${{ matrix.arch }}-${{ hashFiles('image/native-targets.json', 'CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: native-ccache-${{ matrix.arch }}-${{ hashFiles('image/native-targets.json', 'CMakeLists.txt') }}-
+      - name: Build and test architecture-specific package
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          image=$(python3 -c 'import json,os; print(json.load(open("image/native-targets.json"))["targets"][os.environ["ARCH"]]["container"])')
+          platform=$(python3 -c 'import json,os; print(json.load(open("image/native-targets.json"))["targets"][os.environ["ARCH"]]["platform"])')
+          mkdir -p "dist/${ARCH}" ".cache/ccache-${ARCH}"
+          chmod 777 ".cache/ccache-${ARCH}"
+          docker run --rm --platform "${platform}" -e CCACHE_DIR=/ccache \
+            -v "$PWD/.cache/ccache-${ARCH}:/ccache" -v "$PWD:/src:ro" -v "$PWD/dist/${ARCH}:/out" \
+            "${image}" bash /src/tools/build-native-package.sh /src /out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitunes-native-${{ matrix.arch }}-${{ github.sha }}
+          path: dist/${{ matrix.arch }}/
+          if-no-files-found: error
+          retention-days: 14

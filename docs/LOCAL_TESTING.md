@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # Local Testing Without a Raspberry Pi
 
 PiTunes can be tested on a normal computer with the mock server. This serves the real web UI and fake MPD-like API data, so you can inspect layout, controls, and responsive views before flashing a Raspberry Pi image.

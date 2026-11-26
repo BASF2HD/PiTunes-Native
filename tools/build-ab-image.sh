@@ -6,6 +6,9 @@
 # passes.
 set -Eeuo pipefail
 
+echo "Native publication/deployment/OTA requires independent validation; this legacy entry point is disabled." >&2
+exit 1
+
 SOURCE_IMAGE=""
 OUTPUT_IMAGE=""
 PUBLIC_KEY=""

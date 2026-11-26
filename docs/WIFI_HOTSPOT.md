@@ -1,3 +1,7 @@
+> Historical PiTunes reference at dd34c46. Native build/status instructions are in
+> [BUILDING.md](BUILDING.md) and [PROGRESS.md](PROGRESS.md); original download/update
+> links below are not native releases.
+
 # WiFi hotspot
 
 PiTunes can broadcast a setup WiFi network when the Pi has no Ethernet and no home WiFi connection — a captive setup hotspot for initial configuration.
