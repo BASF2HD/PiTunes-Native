@@ -1,0 +1,48 @@
+name: Native PC image smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: PC image architecture
+        type: choice
+        required: true
+        options: [amd64, i386]
+      image_run:
+        description: Successful native image workflow run ID (existing artifact, no image rebuild)
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  smoke:
+    if: github.repository == 'BASF2HD/PiTunes-Native'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.image_run }}
+          pattern: pitunes-native-${{ inputs.arch }}-development-*
+          path: image/out
+          merge-multiple: true
+      - name: Install smoke test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf ovmf-ia32 mtools tesseract-ocr e2fsprogs xz-utils
+      - name: Verify and test an immutable image copy
+        env:
+          ARCH: ${{ inputs.arch }}
+        run: |
+          (cd image/out && sha256sum -c "pitunes-native-${ARCH}.img.xz.sha256")
+          xz -dk "image/out/pitunes-native-${ARCH}.img.xz"
+          python3 tools/test-native-pc-image.py "${ARCH}" "image/out/pitunes-native-${ARCH}.img" image/out/boot-tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pitunes-native-${{ inputs.arch }}-boot-evidence-${{ github.run_id }}
+          path: image/out/boot-tests/
+          if-no-files-found: ignore
+          retention-days: 14

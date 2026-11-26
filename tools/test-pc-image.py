@@ -69,7 +69,7 @@ def display_fault_disk(work, image):
 
 
 class Guest:
-    def __init__(self, arch, work, image, music, evidence, name, *, uefi=False, lan=False, save_overlay=False):
+    def __init__(self, arch, work, image, music, evidence, name, *, uefi=False, lan=False, save_overlay=False, memory_mib=2048):
         self.evidence = evidence
         self.name = name
         self.overlay = work / f"{name}.qcow2"
@@ -78,7 +78,7 @@ class Guest:
         self.save_overlay = save_overlay
         run("qemu-img", "create", "-q", "-f", "qcow2", "-F", "raw", "-b", image, self.overlay)
         args = ["qemu-system-x86_64", "-machine", "q35" if uefi else "pc",
-                "-accel", "tcg,thread=multi", "-smp", "2", "-m", "2048",
+                "-accel", "tcg,thread=multi", "-smp", "2", "-m", str(memory_mib),
                 "-cpu", "coreduo" if arch == "i386" else "Nehalem",
                 "-no-reboot", "-monitor", "none", "-display", "none",
                 "-vga", "std",
