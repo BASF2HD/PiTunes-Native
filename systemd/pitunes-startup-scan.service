@@ -1,0 +1,11 @@
+[Unit]
+Description=Scan MPD library when database is missing
+After=pitunes-display.service pitunes-mount.service
+Wants=mpd.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pitunes/scripts/scan-if-needed.sh
+
+[Install]
+WantedBy=multi-user.target

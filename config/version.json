@@ -1,0 +1,7 @@
+{
+  "product": "PiTunes-Native",
+  "version": "0.1.0",
+  "channel": "development",
+  "repository": "BASF2HD/PiTunes-Native",
+  "updatesEnabled": false
+}

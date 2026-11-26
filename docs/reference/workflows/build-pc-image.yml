@@ -1,0 +1,50 @@
+name: Build PC USB image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, i386]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image build and boot test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap fdisk dosfstools e2fsprogs patch rsync xz-utils debian-archive-keyring \
+            qemu-system-x86 qemu-utils ovmf ovmf-ia32 mtools tesseract-ocr
+      - name: Build and verify the PC image
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          image="pitunes-${ARCH}-${GITHUB_SHA:0:7}.img"
+          sudo env PITUNES_INSTALL_COMMIT="${GITHUB_SHA}" bash tools/build-pc-image.sh --arch "${ARCH}" --output "image/out/${image}"
+          (cd image/out && sha256sum -c "${image}.xz.sha256")
+          echo "PC_IMAGE=${image}" >> "${GITHUB_ENV}"
+      - name: Boot-test the finished PC image
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 tools/test-pc-image.py "${ARCH}" "image/out/${PC_IMAGE}" "image/out/boot-tests"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitunes-${{ matrix.arch }}-usb-${{ github.run_number }}
+          path: |
+            image/out/${{ env.PC_IMAGE }}.xz
+            image/out/${{ env.PC_IMAGE }}.xz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-boot-tests-${{ matrix.arch }}-${{ github.run_number }}
+          path: image/out/boot-tests/
+          if-no-files-found: ignore

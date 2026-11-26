@@ -1,0 +1,12 @@
+[Unit]
+Description=Make PiTunes Bluetooth discoverable
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pitunes/scripts/bluetooth-discoverable.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

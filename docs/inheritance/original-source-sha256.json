@@ -1,0 +1,698 @@
+[
+  {
+    "path": ".gitattributes",
+    "sha256": "4c7435164b1acc6f042ac62361c787b8213312105d753c9b1352cad1e1a9adeb"
+  },
+  {
+    "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+    "sha256": "4e8ed776e23b830e7080f70fceccd206757527692ef05ab6e834dc324de6c6bd"
+  },
+  {
+    "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+    "sha256": "b4f7af0e2009b531a262055bc6903b0f0b027b45f7c38fd90aad06b1f353bb55"
+  },
+  {
+    "path": ".github/social-preview.png",
+    "sha256": "3f8e43d78c34df8b1c457e33784f5f0f3b9c27d61c986abfcc8743f20c1b0e57"
+  },
+  {
+    "path": ".github/workflows/build-image.yml",
+    "sha256": "7a73f816ed73d63c555b0e5a64f3fce415340166544595ce717f84d61c290ea4"
+  },
+  {
+    "path": ".github/workflows/build-pc-image.yml",
+    "sha256": "2728343a9f9d2b31891fddc2364e0222a93792fc991600c771740e2a7be77f3e"
+  },
+  {
+    "path": ".github/workflows/release-image.yml",
+    "sha256": "34d4f06d6cc44616849a451e7e27a6d7d6fc5350c12191d0d54d3201c87f5d7e"
+  },
+  {
+    "path": ".github/workflows/validate.yml",
+    "sha256": "7674d3ec7e36d277f9ba301f947948ee42da042327c97206ee0141425aec179c"
+  },
+  {
+    "path": ".gitignore",
+    "sha256": "0c189dbd117a976cd3989e52e63563d857e53de50b8191b10c5c0f47977ad0a2"
+  },
+  {
+    "path": "CHANGELOG.md",
+    "sha256": "b393d1c5a568e8e601876327139bd424a455072d310650f940b3d10730c62cc0"
+  },
+  {
+    "path": "CONTRIBUTING.md",
+    "sha256": "696975f41fc132b4c263df19a00bac57f5d0cc7d1ad2c716f5ac003620077bd3"
+  },
+  {
+    "path": "LICENSE",
+    "sha256": "25ac557ac03ac1e5bc477fa6451b920d03889d3bca8b8dd8d64ef7f1ea16449b"
+  },
+  {
+    "path": "README.md",
+    "sha256": "8f182ddd684b6ad6421d9f2e252919a4860d03a05ca3f4a4858178d9e0a59bfa"
+  },
+  {
+    "path": "SECURITY.md",
+    "sha256": "a9f0c86bb4c3e4ed348d2cce20522139779b4a2e160319eca58c5d68b6eb3618"
+  },
+  {
+    "path": "THIRD_PARTY_NOTICES.md",
+    "sha256": "5a50245268ff03fbd847467cafc4b56f3d6388bb23024e9074b06c8d91a49d64"
+  },
+  {
+    "path": "backend/README.md",
+    "sha256": "4903075704658de77e38ae987de9fd18a8c334bc58ac616e6e4ecec772c9d144"
+  },
+  {
+    "path": "backend/audio_output.py",
+    "sha256": "445817a1b61cfc650861cbf52fb25eea281bc39deaef81c4a8032e97d99b4441"
+  },
+  {
+    "path": "backend/library/__init__.py",
+    "sha256": "ebb0f11d72c86d11972d586fce16cae0f5314a0e574061d29289f00aa7526d14"
+  },
+  {
+    "path": "backend/library/art_resolver.py",
+    "sha256": "0041c6fdd6e258a66d5faaa487f7391d759d244afdec291eb382715c0f678905"
+  },
+  {
+    "path": "backend/library/db.py",
+    "sha256": "d1bda2f18632b4d0be4f5891bd4cdcd6a2556ecde867aa6e95b4cea9899c3733"
+  },
+  {
+    "path": "backend/library/queries.py",
+    "sha256": "085786c81c6d25e12bb2a81a1877aa8412502c9ae707df373bf50191a49a26eb"
+  },
+  {
+    "path": "backend/library/radio_browser.py",
+    "sha256": "58c56447cd3822fd6146089ac9d2a36de51e14d8458bd7dbddc947f881c31a07"
+  },
+  {
+    "path": "backend/library/radio_icons.py",
+    "sha256": "a127e05e05f04a22a0cce7275a0a3c15e2494f3da7f8ecde661723e5c2f39bf1"
+  },
+  {
+    "path": "backend/library/scanner.py",
+    "sha256": "d27d315504f0bb5446f6f8f42c9fcd759660e0a49b56ef7430f3aca815f040ad"
+  },
+  {
+    "path": "backend/library/system.py",
+    "sha256": "d84dfa4311bd739a59c01bbd411c3f3432f540516b8048ab65cb2e096e34b0f4"
+  },
+  {
+    "path": "backend/library/ui_context.py",
+    "sha256": "d925c37edfdc31f2bd063398566efcc70f8e4f6e9fd81161d8510210df80ed45"
+  },
+  {
+    "path": "backend/library/userdata.py",
+    "sha256": "50df3f53ed6fde2726e88fb8f66fe41a2d9b92d4a780ea809dbb1d5f2526198b"
+  },
+  {
+    "path": "backend/mpd_client.py",
+    "sha256": "843eb5ef5dba0af9324fdb68ca41e068bffac7f9d404f8fc7240f4868a2d7fb9"
+  },
+  {
+    "path": "backend/network_wifi.py",
+    "sha256": "352442676135149772a65b95d886be1d1df2453522c9b95bf934eb3d10933b50"
+  },
+  {
+    "path": "backend/pitunes-api.env",
+    "sha256": "b4a2d1f66bac024358995bbd5bfd74edbe3203760853a40874a0a212cf2bedb9"
+  },
+  {
+    "path": "backend/playback.py",
+    "sha256": "71a3f5f9e1766e6ca38b57b09fff9f7e35c466b30dcada8c3f88133ddcd83504"
+  },
+  {
+    "path": "backend/playback_modes.py",
+    "sha256": "5d6923c9e3c8812b88c1340bdc5f1c8a1bcbdc38bbdb527f9b25c9023d9ebcca"
+  },
+  {
+    "path": "backend/server.py",
+    "sha256": "2ea75d996a46cad1232ae4301b407c4da52e035ec7550ec9845e232419603cc9"
+  },
+  {
+    "path": "backend/shared.py",
+    "sha256": "af76af19dbcd7b0e8d4aaa1e824898e1b674cd83052f3c417c7aa9a3a8ffad45"
+  },
+  {
+    "path": "backend/storage_sources.py",
+    "sha256": "f0e8de6745ad224fc035693041d8b9ee1b2f08f1bc6637c6b6bdbd877b4653a5"
+  },
+  {
+    "path": "config/99-pitunes-music.rules",
+    "sha256": "eacf0a26c5e261e844c4b634c70177f8cd489d2af902a89aae028bc2233aea71"
+  },
+  {
+    "path": "config/NetworkManager/conf.d/pitunes-wait-online.conf",
+    "sha256": "02a626ec2430c0becc0cf37ec4c5668de22fb2be1317c0e69dcb7b8983afbcc6"
+  },
+  {
+    "path": "config/avahi-smb.service",
+    "sha256": "26d355be307222f393f856e3ee3d95d6e27e1e299813a9548de6c62939095e74"
+  },
+  {
+    "path": "config/brand/pitunes-logo-branded.png",
+    "sha256": "9a4450931d353229b844ca39b0e8ba59ca41830109299b06e3aff169276cbbbb"
+  },
+  {
+    "path": "config/brand/pitunes-logo-source.png",
+    "sha256": "2fe919fcb095217ad5ddf3ee44a0c081801456efa97c2b39e888a3c2c1ed1396"
+  },
+  {
+    "path": "config/dac-hats.json",
+    "sha256": "e4d2d229670e9f4835728409be7586baf46f7e53d793dfcb13845d6e4cd816cb"
+  },
+  {
+    "path": "config/pitunes-tmpfiles.conf",
+    "sha256": "103b9481a985dc5395975eef0fa819c31d75c584f174781c30a0c66bb339d8ff"
+  },
+  {
+    "path": "config/radio-stations.seed.json",
+    "sha256": "0bebf22fb71d9c0c43ed0dfe36bab923231f4940ecdc1a1001814800f33a25c0"
+  },
+  {
+    "path": "config/settings.json",
+    "sha256": "89946ce741a4eaf65ab588b5d9f01c15700ee2d50ad504bdb6fe3afa95d9d641"
+  },
+  {
+    "path": "config/smb.conf",
+    "sha256": "22271c244b71fb956b388e59c8062f987a711de8cba64c62719c9e0e9cce8df0"
+  },
+  {
+    "path": "config/system-update.example.json",
+    "sha256": "80b6bb773326d8ca7f9b849664f22abed68a587fa76de3f83d60036cd6322f94"
+  },
+  {
+    "path": "config/systemd/NetworkManager-wait-online.service.d/pitunes-timeout.conf",
+    "sha256": "ac65b8aea01a24340a7002d44f44c1d5a5fda0ff085400541624aa11391567f8"
+  },
+  {
+    "path": "config/systemd/mpd.service.d/pitunes-boot.conf",
+    "sha256": "5033dad8c4bdd03ad6ea18b6c2b64cf0bc6ca74b5d353f4da26fbec2b0431841"
+  },
+  {
+    "path": "config/systemd/nginx.service",
+    "sha256": "5c9f3ec2ceab91dbadd46218658b722b701fdb813bb993aedd38bfdf41bce04b"
+  },
+  {
+    "path": "config/systemd/pitunes-startup-scan.service.d/after-display.conf",
+    "sha256": "3b619a166b70efdf6900d2fa5d94fdc17a3c96cab1a3a48d7ff4049eea731b07"
+  },
+  {
+    "path": "config/systemd/systemd-user-sessions.service",
+    "sha256": "ffe7242ba06bc12a0900a031d758c5406105d2de9b25d349e8cb2baaf8ad9a00"
+  },
+  {
+    "path": "config/version.json",
+    "sha256": "230522e4921a253c638572fed6258b4c8bbbd2b141361b9feec10fe5f01c2024"
+  },
+  {
+    "path": "config/wifi-hotspot.conf",
+    "sha256": "bc938c2a53436857b91caf17cf5094b2653fe086aca05bbbf5c627d04a89aa17"
+  },
+  {
+    "path": "configure-mpd.sh",
+    "sha256": "3fd9438ff76be3cda415cb8237a23020ca81c627d9c2872b769104f30745fe2f"
+  },
+  {
+    "path": "docs/.nojekyll",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "docs/AB_SYSTEM_UPDATES.md",
+    "sha256": "d097dbb0c6f36fa334fc5b011bbe7055c9c76853343f05f82de587bb554bc9e7"
+  },
+  {
+    "path": "docs/BOOT_PERFORMANCE.md",
+    "sha256": "dc29179f1ff1b468e56ae3c60bcd74d95346c7bb1135592306904fd793ef4519"
+  },
+  {
+    "path": "docs/DOWNLOADS.md",
+    "sha256": "8b83d0e1091315158653354e33ccd5a6444fb76822fec1708cc2f131752dc786"
+  },
+  {
+    "path": "docs/IMAGE_CREATION.md",
+    "sha256": "fe71a866725443b26dd8268e0dfd0491b26ddfe4f9e61dfbb4ffbd0906d04525"
+  },
+  {
+    "path": "docs/LOCAL_TESTING.md",
+    "sha256": "ccfa508da68ac915c3ff529a998fa883813d651cf911a924d655566d1ce7d85e"
+  },
+  {
+    "path": "docs/MAINTENANCE.md",
+    "sha256": "287696d7c6b1aae9eb9e0b50406c534acd2519d1f872d0a70b4e5d1f0e45c428"
+  },
+  {
+    "path": "docs/PC_USB.md",
+    "sha256": "411147ab7236201c6d312f89067c9aa5207a8f55472e6c53f10f62686f7d6d36"
+  },
+  {
+    "path": "docs/RADIO.md",
+    "sha256": "385e94dff59f7668d2e032433a5278ca98832bff66392735dd010d89e6d769fa"
+  },
+  {
+    "path": "docs/ROADMAP.md",
+    "sha256": "ec511c121efc70c3269306a6603ccf6038ce323ff785a2b948057e0d45883c42"
+  },
+  {
+    "path": "docs/TROUBLESHOOTING.md",
+    "sha256": "fa478309d1c5f771ac097fc36a636fc8bb7d5b11671df7c68af7375f9f611f49"
+  },
+  {
+    "path": "docs/UPDATES.md",
+    "sha256": "822e7132dab18e334d083f60bcd6938338fb9b749a5836e62783dec53a36a5d6"
+  },
+  {
+    "path": "docs/WIFI_HOTSPOT.md",
+    "sha256": "8d65879ec97dbfd468e2cd1c10dd4ab195aecff2b9f91a6a3a32a77c04d54c99"
+  },
+  {
+    "path": "docs/assets/favicon.ico",
+    "sha256": "bfa42a4cc8c246b5dffc6e2e2e7e8f0feee0fd623d89558d48d24cf0dc49709e"
+  },
+  {
+    "path": "docs/assets/pitunes-logo.png",
+    "sha256": "de99d6ea24a36ef348bd2236dccb5b26562d1d03564ca168accd59011ae1ab81"
+  },
+  {
+    "path": "docs/assets/pitunes-player-gui.png",
+    "sha256": "f459f7ce2d0be0005592c7da4d1d0064537ade21d70faf1f407eb63301b1b18f"
+  },
+  {
+    "path": "docs/assets/pitunes-social-preview.png",
+    "sha256": "3f8e43d78c34df8b1c457e33784f5f0f3b9c27d61c986abfcc8743f20c1b0e57"
+  },
+  {
+    "path": "docs/googledacd7daa9b8a5794.html",
+    "sha256": "c51f487eaa402eb06d80ca55765a3fe9e28c46258301299735c1fac433b5740e"
+  },
+  {
+    "path": "docs/index.html",
+    "sha256": "faa9467090fd7993bb90cb2d40f0d2851884990b0efa40eb7e92633809a6b0f0"
+  },
+  {
+    "path": "docs/robots.txt",
+    "sha256": "e567c61e47b7ad8d45fe374c88989941ed54ced91c012b9fefa95409ab858766"
+  },
+  {
+    "path": "docs/sitemap.xml",
+    "sha256": "6f77fcdc22265f5cb4df7b26f8d1bb9eaf4ecf00e97eb73aa5dc010d194a4a2b"
+  },
+  {
+    "path": "docs/style.css",
+    "sha256": "da18f64e59009a7379bb797fb74592a8dab1a78d39f63fe9386af8983a7f646d"
+  },
+  {
+    "path": "frontend/assets/album-identity.js",
+    "sha256": "045d1113f16f20e68133d267671b8f0d146830199f4d814505bf5d6dfd870479"
+  },
+  {
+    "path": "frontend/assets/app.js",
+    "sha256": "454b8e5c28179e684c938ae5d42238180de2c18242d76e2e11c65498feab9698"
+  },
+  {
+    "path": "frontend/assets/browse-counts.js",
+    "sha256": "6d85aba79ddf185989d45d0ece09b46c3db66867ab608a030871ab60005a6c1f"
+  },
+  {
+    "path": "frontend/assets/coverflow.js",
+    "sha256": "512ac4d01d42d8b934913580e78dc3c455d6112fa534c9091ed632a99d11e59a"
+  },
+  {
+    "path": "frontend/assets/favicon-16.png",
+    "sha256": "8586a0a833c1fed04fad25987d3c4bf398e200ccd17cd1b4bc6bd80d921a6494"
+  },
+  {
+    "path": "frontend/assets/favicon-32.png",
+    "sha256": "1eb6fc6571c1abc33cca530d1f873a8ebe0774f482403618341f5f7ab1503cd8"
+  },
+  {
+    "path": "frontend/assets/favicon.ico",
+    "sha256": "bfa42a4cc8c246b5dffc6e2e2e7e8f0feee0fd623d89558d48d24cf0dc49709e"
+  },
+  {
+    "path": "frontend/assets/favicon.svg",
+    "sha256": "daf5635dc5f9eec13b500e9794c0416e1354ead536f2662b26ab4d06212d48cb"
+  },
+  {
+    "path": "frontend/assets/music-export.js",
+    "sha256": "407c13251cfb62b40af8c34a161cafd1352259bea57b6aa96c9e634225b02ba4"
+  },
+  {
+    "path": "frontend/assets/pitunes-icon-192.png",
+    "sha256": "bdf1d3127a9098a49dcbfa1435517cddfa70f89faa105e245842c374c3a33c60"
+  },
+  {
+    "path": "frontend/assets/pitunes-icon-512.png",
+    "sha256": "0855176008fd1059d5152dc7731802df4427d517218a7e9fc787313ae4f4b9fd"
+  },
+  {
+    "path": "frontend/assets/pitunes-logo-splash.png",
+    "sha256": "f07f26f65971f68049da26ecd162e5d2d87e04d43bbbb05c4d568e24093e8d27"
+  },
+  {
+    "path": "frontend/assets/pitunes-logo.png",
+    "sha256": "8b174e7c856a7b7b91b2bf39d833ed907d28fcfe407923dd0de074efd6a111ab"
+  },
+  {
+    "path": "frontend/assets/playback-order.js",
+    "sha256": "20cb72ee571590933ff3711b4f61d1c73e19294d3d1571fab7d92b9e2dd8df50"
+  },
+  {
+    "path": "frontend/assets/radio-no-logo-source.png",
+    "sha256": "cf0eea3431bc386f9274af352ff266e0157976faa64609140f5498a6cf2c55a7"
+  },
+  {
+    "path": "frontend/assets/radio-no-logo.png",
+    "sha256": "ddd439488d2aa97124c9fbc1924ddbf37a03cc2af03affeec36b7e3fceeebbfc"
+  },
+  {
+    "path": "frontend/assets/radio-no-logo.svg",
+    "sha256": "825c8440f2ed62178fe5bac60a941016962fb5ffa577adcde6f23c43e2f20e18"
+  },
+  {
+    "path": "frontend/assets/renderer.js",
+    "sha256": "0ad9c81505ce1bf3534b1c12ba36793c9a62c67b808dc81ce930ba867a16674a"
+  },
+  {
+    "path": "frontend/assets/styles.css",
+    "sha256": "cb8bcac522d9578ae43e1e3a9ec3f388e959fc35624c3447a00df998ea8b30a7"
+  },
+  {
+    "path": "frontend/favicon.ico",
+    "sha256": "bfa42a4cc8c246b5dffc6e2e2e7e8f0feee0fd623d89558d48d24cf0dc49709e"
+  },
+  {
+    "path": "frontend/index.html",
+    "sha256": "abc08ee388a5ac10c507a4709706f0e2f8059765949e62aa5005a9018a1b17f2"
+  },
+  {
+    "path": "frontend/vendor/gsap.min.js",
+    "sha256": "e5118140a15e5dbb471f19c06816bcfa44170878bd8fe0ade80c24b7a988d8ba"
+  },
+  {
+    "path": "frontend/vendor/three.module.js",
+    "sha256": "5916c8dfb5f4e3eede312de305345868d4a0a8105383b080c6985565d6e79b46"
+  },
+  {
+    "path": "frontend/vendor/three.r128.min.js",
+    "sha256": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2"
+  },
+  {
+    "path": "image/README.md",
+    "sha256": "57bf0d1cfde37315f9bd397dccbb253009285a601a8756bdd9edf9a6c3868ec5"
+  },
+  {
+    "path": "image/build.env",
+    "sha256": "fcad588431f28dab81fa72b64bdc880019af4608c2b06acfd30fdc5e8d09fb87"
+  },
+  {
+    "path": "image/out/.gitkeep",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "image/pc/boot/configure.sh",
+    "sha256": "b373617c015c31b9a5d1c049d9c8a8007df3e47eed6a1ecc119300c5aa07c783"
+  },
+  {
+    "path": "image/pc/boot/display-report.service",
+    "sha256": "36d25a9e467170b6e50a8bfb690b4424b30f996aa1cc89c1f7e271af19de5b17"
+  },
+  {
+    "path": "image/pc/boot/display-report.sh",
+    "sha256": "f3bdc7aa62354c1cb18cbfdc62751b1a3e3e97a7449f7bb7d283d9ae4024fe96"
+  },
+  {
+    "path": "image/pc/boot/lightdm.conf",
+    "sha256": "6eda50dba52822817e5eb5ae8092fd3b27d93da3ac946fbc89561a8167603ef0"
+  },
+  {
+    "path": "image/pc/boot/mount-music.service",
+    "sha256": "f077871c6c44674001b164ef50a7c786f7b1a3ec9e5ed76ca3ae43f5380ed2d0"
+  },
+  {
+    "path": "image/pc/boot/start-display.sh",
+    "sha256": "c92bc311c01900a6058f96e8de4df6069959643b2838675275c15f853b233edd"
+  },
+  {
+    "path": "image/pc/kiosk-readiness.patch",
+    "sha256": "bc373686d7e62e3de24f2d982a844637bb108ae0c2c8124de9b2613d84456a0b"
+  },
+  {
+    "path": "image/pc/render-on-demand.patch",
+    "sha256": "c59b28b09c85e0c49207b1738bb146b85c7e908fcc0286afb036942ea8a40baa"
+  },
+  {
+    "path": "image/pc/runtime.patch",
+    "sha256": "8ee063b6c0abac16486c04945db4c2019e53dfc4de348f6284a6443dc43f457e"
+  },
+  {
+    "path": "install.sh",
+    "sha256": "520125d9436b5eab8bf5067ac6bd1ff75a4ecef58b60aace42f52837a449d93b"
+  },
+  {
+    "path": "nginx/pitunes.conf",
+    "sha256": "d9666577e8898973c713f15046a637786c1a042d0fc1398ecc863a88be42d4c8"
+  },
+  {
+    "path": "scripts/appliance-self-test.sh",
+    "sha256": "437132a1f72a1edaf35300c9663cab07268706c2588af9ddc98fd14a6a4a890a"
+  },
+  {
+    "path": "scripts/apply-audio-output.sh",
+    "sha256": "72327566a6dcc6e5d93483f2b2ae2ebd9af3501c00f218bb5a861d4c538cfe3d"
+  },
+  {
+    "path": "scripts/bluetooth-discoverable.sh",
+    "sha256": "43d161e238e0f671e79f15168da0d1b896b62a1f444967530c8ff7edfe6b8f5f"
+  },
+  {
+    "path": "scripts/boot-performance-report.sh",
+    "sha256": "7abc44b88531f6b62e569d0952dba47a4c62b9cffec9d60bef83d06315f2a07e"
+  },
+  {
+    "path": "scripts/firstboot.sh",
+    "sha256": "81835f2f56cecef07c7d48a74670548aa76dc20ddae0a6144d7b6fd4c1275868"
+  },
+  {
+    "path": "scripts/golden-image-cleanup.sh",
+    "sha256": "2f08c06c405a97629f3cf30594b2088329b7983edfdb8bddbbe08f37cec52fd4"
+  },
+  {
+    "path": "scripts/mount-music-drive.sh",
+    "sha256": "09826ef348945370d35027ca09f65f17da710de67e352a256b72f3dac6692e2b"
+  },
+  {
+    "path": "scripts/pitunes-display.sh",
+    "sha256": "0a01c84ed4e2e71685d77de89217eee3fdb2ed7051d590d8ee227c35326c462c"
+  },
+  {
+    "path": "scripts/pitunes-kiosk-launch.sh",
+    "sha256": "cc070f4975f6d11bf08147e9931a0965e3f7f73ed1e15067b6be3d55862d561b"
+  },
+  {
+    "path": "scripts/pitunes-system-boot-check.sh",
+    "sha256": "f895fc3c600b92cb651230409209d5f670ec1c5c4465fcc97bb639a26eb92fc7"
+  },
+  {
+    "path": "scripts/pitunes-system-update.sh",
+    "sha256": "06ca245bd8b531695637b1e8b4fcc73c93d804d9742fea865b7442601da91a39"
+  },
+  {
+    "path": "scripts/pitunes-update.sh",
+    "sha256": "fea9f0772c5537c9f61b1712211eabe8fbbef2652603dba08730b7a14961cf39"
+  },
+  {
+    "path": "scripts/scan-if-needed.sh",
+    "sha256": "ae17b3bca5eddb6c3b4b0df097be6699facdd7931065200a8f993d77e084ec10"
+  },
+  {
+    "path": "scripts/setup-kiosk-boot.sh",
+    "sha256": "0d9dbbddd5f46a3265bcdb75ec0331a6560d8d9f208ff94343bb06ff1290f392"
+  },
+  {
+    "path": "scripts/setup-kiosk.sh",
+    "sha256": "40829738d8dcb293587ae398950b28e5cb0992849d4b6d41a82e99b361bce7bc"
+  },
+  {
+    "path": "scripts/setup-wifi.sh",
+    "sha256": "b3081d39a96ff41d6d18b68e36920c03fa231cb8be6dc7dfea4639116a98b8f3"
+  },
+  {
+    "path": "scripts/setup-wireless-audio.sh",
+    "sha256": "667131e1630f81bc08afce26916bd2e832604d02d40d04eab93ac02a5ae6e163"
+  },
+  {
+    "path": "scripts/wifi-hotspot.sh",
+    "sha256": "02147583ef20038ff483608cd64f6f08906a5ef680108ba42f69420e7724004d"
+  },
+  {
+    "path": "systemd/pitunes-api.service",
+    "sha256": "e87b4b4aeac52ac2f17dfc2a4e0cf17cce950c42dcdf3a8e3a1c66707c6de441"
+  },
+  {
+    "path": "systemd/pitunes-bluealsa-aplay.service",
+    "sha256": "7dfdce81f23ede83437cd0fe946ed69536379099cdacfa68136688e5692186e0"
+  },
+  {
+    "path": "systemd/pitunes-bluetooth-discoverable.service",
+    "sha256": "2fccac425bd2801a43ce8ee7efda8752697939bc7615ea76a1d4b6c2359e8714"
+  },
+  {
+    "path": "systemd/pitunes-bt-agent.service",
+    "sha256": "a70c03cec882386742ca081326520689b61230fc72e23996c5b9ad08efe728f2"
+  },
+  {
+    "path": "systemd/pitunes-display.service",
+    "sha256": "b44cc11d2398cf134a6eeead626a3ffafe022820e7729ab8db356d2317b587a4"
+  },
+  {
+    "path": "systemd/pitunes-firstboot.service",
+    "sha256": "1bab73a10dcf4f86bfe577d0f283ddf62309ef52f4c0e06eb5027f4a3928a0f4"
+  },
+  {
+    "path": "systemd/pitunes-hotspot.service",
+    "sha256": "bde316b5edd676a2596ba38d9060d8068cad3cbaf4ad2ba3c8b0134410c4afff"
+  },
+  {
+    "path": "systemd/pitunes-mount.service",
+    "sha256": "8b78b98c3a9f4d9ff9517ce3ef4ad59ba763183c4765ce3d60737d2dfac145e7"
+  },
+  {
+    "path": "systemd/pitunes-samba-late.service",
+    "sha256": "aca18b4b5642b1aa74bf1711060c8a37cfe1912e83f91abf3c07fc412f0fd8d2"
+  },
+  {
+    "path": "systemd/pitunes-samba-late.timer",
+    "sha256": "8c706c5e519ef1a16635578a7601e71ea57ae22db32dcc3f9c36af806c766228"
+  },
+  {
+    "path": "systemd/pitunes-startup-scan.service",
+    "sha256": "b174fd7a21ca3eec14a65226d57dd4fc2cc65af3e565336af2c346045a7544b7"
+  },
+  {
+    "path": "systemd/pitunes-storage-refresh.service",
+    "sha256": "7d83f531bbfc73231825b3a23706b950e37db0b95b41e9754d7f18be6aae2ff9"
+  },
+  {
+    "path": "systemd/pitunes-system-boot-check.service",
+    "sha256": "c71ce112887f370e9c5d155deb65177884b9f0dc8ac1bfebcfd930f7db014e57"
+  },
+  {
+    "path": "systemd/pitunes-system-update.service",
+    "sha256": "ef21dfd5f9c27b5a5efeb3d26393f1bb083e14ac5f8a8b6404189dd032351a92"
+  },
+  {
+    "path": "systemd/pitunes-update.service",
+    "sha256": "adb0b1eb09cc3085687b7f5e98a4f4f375b451bb7a9bf832842fff31fa9f4ecc"
+  },
+  {
+    "path": "tests/album-identity.test.mjs",
+    "sha256": "ee47650370cff34602f567eea677b16373c76e77d72b646feac9977873c02584"
+  },
+  {
+    "path": "tests/browse-counts.test.mjs",
+    "sha256": "5775b550f06a953cd9a3f3134465029ed9be3446b2e72d5571fc915ebbb2ca58"
+  },
+  {
+    "path": "tests/music-export.test.mjs",
+    "sha256": "0a79ac13a721174a1c92bca14d62b1b74d505f5f5057dbc04d5d33d890e8d89a"
+  },
+  {
+    "path": "tests/playback-order.test.mjs",
+    "sha256": "36bbc8ec8e61d9d0185e0112871609bd1889863a8b9bc2082b2871403b628400"
+  },
+  {
+    "path": "tests/test_album_scanner_identity.py",
+    "sha256": "81b701eac01da542fc2658a0fdb884d6c74c13f2c346cea20b0c156fbe147210"
+  },
+  {
+    "path": "tests/test_music_export_queries.py",
+    "sha256": "e3f3295d87548b080ccad504ba63cb1c680280efe7ea911a59758a5b7bf1159f"
+  },
+  {
+    "path": "tests/test_playback_modes.py",
+    "sha256": "676df5872318bfbda42c480efaec80afbdcd11c7c5d99bb084af25d627b35141"
+  },
+  {
+    "path": "tests/test_radio_search.py",
+    "sha256": "5180659032f08a3b89406e61c8d17604afaa7c45e9a98a8e685ebdc7db50fd05"
+  },
+  {
+    "path": "tests/test_system_boot_check.sh",
+    "sha256": "7a8cb5d0ecc317d568668f3c688682f7015e79b8c83ff29317907314a8f07dd0"
+  },
+  {
+    "path": "tests/test_system_update.py",
+    "sha256": "2bbbbee9b54078916e54ae84ca0464a47ad568ad705dae8ce48b8260945357b5"
+  },
+  {
+    "path": "tests/test_system_update_script.sh",
+    "sha256": "35f25ef3606e485bb766104bf9ac946cae5efad74dd1e1a1272915171973c88c"
+  },
+  {
+    "path": "tests/test_update_script.sh",
+    "sha256": "50369d03180a90b588bc4378d5ad2a1287fd1e918731867f6b1347e03b570f59"
+  },
+  {
+    "path": "tests/test_userdata_playlists.py",
+    "sha256": "6730ddbf6d6ee804ab536da2d759839c3bd67bb50f7632128c957b1cfe730786"
+  },
+  {
+    "path": "tools/build-ab-image.sh",
+    "sha256": "992ef4ae517f0436fa843b2023dd88c5cd5333aa702c2f3bfe6c7b5107761760"
+  },
+  {
+    "path": "tools/build-brand-assets.py",
+    "sha256": "19c4aca21df19c2df95b5a27a021386abcf26a37343be8d8ce98411a729d4dbc"
+  },
+  {
+    "path": "tools/build-flashable-image.sh",
+    "sha256": "1d6177589dfcb161c8e247fe3fc556c5a98271fece5abbb37e54417f2c3f6e46"
+  },
+  {
+    "path": "tools/build-pc-image.sh",
+    "sha256": "5dae23640616f288a7bd13df099c56fd36283f21a3cbecfc76ee5ca203143c77"
+  },
+  {
+    "path": "tools/build-radio-placeholder.py",
+    "sha256": "6a0ad3bcdf829b6b2a3c5b41586ad80880e376143ed694c70ae14554f123135a"
+  },
+  {
+    "path": "tools/build-system-update-bundle.sh",
+    "sha256": "8a3cb7aca756e8838b03af54c2eb10491e0403c205e3561339c5bceb7c75e624"
+  },
+  {
+    "path": "tools/chroot-install.sh",
+    "sha256": "6199170e348ab3d15b2a7f8210631fecfdc0ed2a00c717a40545540e1b998ed9"
+  },
+  {
+    "path": "tools/create-image.sh",
+    "sha256": "fd88cc5e7c484ffd2d0b8360da59e4733ed86bcf3d1791a7d136cc2ce8dc5487"
+  },
+  {
+    "path": "tools/deploy-to-pi.sh",
+    "sha256": "f4765746808b171f6d741cad3c506e129f8fc4aba416e6de03d894a6f8ed4ab9"
+  },
+  {
+    "path": "tools/mock-server.py",
+    "sha256": "194f762ec2f2ca37d7c113247d67d7eba4a9ac0c27e482ef89d16687cb6cf7c3"
+  },
+  {
+    "path": "tools/publish-image-release.sh",
+    "sha256": "ce5d2a61bc67eb0ffcdb76700e92e4f3b8d9e27a795c11e78471e217fb05ce54"
+  },
+  {
+    "path": "tools/start-mock.ps1",
+    "sha256": "7f7d37836dfd59a4bb4feedf7673c28271f7f3455b43d12b1c254a6409014b4d"
+  },
+  {
+    "path": "tools/test-pc-image.py",
+    "sha256": "46bb1912ac3a6c1bcadbd562b92184090e46875e64fae436e61b6ef58c5458dc"
+  },
+  {
+    "path": "tools/validate-release.sh",
+    "sha256": "27ab24b72cf3ec85f860116a51f3dc4ac20404849c48ebafcd36b9fbdcb86f85"
+  }
+]

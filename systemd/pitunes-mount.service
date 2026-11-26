@@ -1,0 +1,12 @@
+[Unit]
+Description=Mount local music drive for PiTunes
+Wants=network-online.target
+After=local-fs.target network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/pitunes/scripts/mount-music-drive.sh
+
+[Install]
+WantedBy=multi-user.target
