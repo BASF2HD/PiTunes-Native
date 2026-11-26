@@ -164,7 +164,8 @@ void MainWindow::showAlbum(int row, bool play) {
     const Album album = *selected;
     if (m_demo) { showTracks(album.title, {{"demo/track.flac", "Demonstration track", album.artist, album.title, album.id, album.year, 210}}, album.id); return; }
     const auto generation = ++m_drawerGeneration;
-    m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(album.id)) + "/tracks",
+    const auto decodedId = QUrl::fromPercentEncoding(album.id.toUtf8());
+    m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decodedId)) + "/tracks",
         [this, album, play, generation](QJsonObject o, QString error) {
             if (generation != m_drawerGeneration) return;
             if (!error.isEmpty()) { setMessage(error); return; }

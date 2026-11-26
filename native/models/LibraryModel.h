@@ -2,6 +2,7 @@
 #include "Domain.h"
 #include "networking/ApiClient.h"
 #include <QAbstractListModel>
+#include <QTimer>
 
 namespace PiTunes {
 class LibraryModel : public QAbstractListModel {
@@ -26,5 +27,7 @@ private:
     quint64 m_generation = 0;
     int m_total = 0;
     bool m_loading = false;
+    QTimer m_retry;
+    int m_retryDelayMs = 3000;
 };
 } // namespace PiTunes

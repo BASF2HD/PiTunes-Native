@@ -85,3 +85,19 @@ A real Cocoa Mac window was launched and captured successfully (beyond offscreen
 tests). A single 10-second offscreen demo process sample is recorded in
 docs/benchmarks/macos-demo-process.json: 54.55 MiB maximum process RSS, no audio/API
 load. It is not target system RAM, a Chromium comparison or appliance acceptance.
+
+## Package installation / startup corrections
+
+The corrected amd64/i386 packages built and passed CTest in run 45902512642.
+Image run 45902534773 compiled/packaged/installed the app, then stopped at its
+executable-location check: the DEB uses /usr while the session expected /usr/local.
+Made /usr explicit in CPack, aligned session/checks to /usr/bin/pitunes-native,
+and extended architecture CI to install each package and save a raster screenshot.
+Added backoff retry for delayed API startup and still-empty first scans/mounts,
+with a new late-backend test. Qt suite is now 14 substantive cases (16 including
+init/cleanup). No false claim of a completed/booted image was made for these runs.
+
+A separate manual Native PC image smoke workflow reuses the inherited disposable
+QEMU machinery, with a 1 GiB guest, so an existing image artifact can be boot-tested
+without rebuilding it. Includes no-NIC BIOS GUI, UEFI GUI/silent WAV, disabled
+updates and backend playback while Xorg is intentionally unavailable. Not yet run.

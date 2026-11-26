@@ -17,6 +17,12 @@ cmake --build "${work}/build" --parallel 2
 QT_QPA_PLATFORM=offscreen ctest --test-dir "${work}/build" --output-on-failure
 (cd "${work}/build" && cpack -G DEB)
 mkdir -p "${output_dir}"
+for package in "${work}"/build/pitunes-native*.deb; do
+  dpkg-deb --fsys-tarfile "${package}" | tar -tf - | grep -Fx './usr/bin/pitunes-native'
+  apt-get install -y "${package}"
+done
+QT_QPA_PLATFORM=offscreen /usr/bin/pitunes-native --demo --screenshot "${output_dir}/software-render.png" --screenshot-delay 100
+test -s "${output_dir}/software-render.png"
 cp "${work}"/build/pitunes-native*.deb "${output_dir}/"
 dpkg-query -W -f='${binary:Package}\t${Version}\n' >"${output_dir}/build-packages.tsv"
 (cd "${output_dir}" && sha256sum ./*.deb >SHA256SUMS)

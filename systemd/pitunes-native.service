@@ -6,7 +6,7 @@ StartLimitBurst=3
 [Service]
 Type=simple
 Environment=QT_QPA_PLATFORM=xcb
-ExecStart=/usr/local/bin/pitunes-native --fullscreen
+ExecStart=/usr/bin/pitunes-native --fullscreen
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

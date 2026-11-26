@@ -24,6 +24,8 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
         m_timer.stop(); m_target = 0; m_position = 0; prefetch(); update();
     });
     connect(model, &QAbstractItemModel::rowsInserted, this, [this] { prefetch(); update(); });
+    connect(model, &LibraryModel::pageLoaded, this, QOverload<>::of(&CoverFlowWidget::update));
+    connect(model, &LibraryModel::error, this, [this](const QString &) { update(); });
     connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { update(); });
 }
 int CoverFlowWidget::visibleCoverCount() const {

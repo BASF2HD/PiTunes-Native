@@ -9,7 +9,7 @@ appliance acceptance. Original dd34c46 remains unchanged.
 | Python selected suite | 31 passed, including real HTTP migration/update gates and all four staging paths |
 | JavaScript node tests | 24 passed, original identity/counts/CSV/playback contracts |
 | CMake Debug + Release | Native arm64 Mac executables compiled successfully with warnings enabled |
-| CTest / QTest | 13 substantive cases (15 with init/cleanup) passed in both build configurations |
+| CTest / QTest | 14 substantive cases (16 with init/cleanup) passed in both build configurations |
 | Release validator | Shell/Python/JS syntax, App OTA fixtures, signed system fixtures, boot rollback fixtures passed |
 | Native image Mac guard | Refused with explicit root Linux/loop-mount requirement, as intended |
 | Screenshots | Demo and mock-backed Qt raster output inspected; 800x480 and 480x800 layouts checked |
@@ -21,7 +21,7 @@ analyzer does not model Qt's functor ownership. These are not confirmed leaks, b
 the analysis must not be described as warning-free. Lifetime/destruction tests
 pass; allocator/leak profiling on target Linux remains open.
 
-Native QTests cover demo avoiding API/system changes, serialized rapid transport,
+Native QTests cover late backend recovery, demo avoiding API/system changes, serialized rapid transport,
 mixed state JSON, stable IDs, body errors/invalid JSON, timeout without mutation
 retry, origin/size bounds, stale requests, full 5,001-album paging, corrupt image/
 LRU budget, <=2 jobs, destroyed receivers, low-budget prefetch stopping at idle,

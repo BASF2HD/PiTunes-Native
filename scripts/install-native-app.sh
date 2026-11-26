@@ -27,8 +27,11 @@ if [[ "${#new_packages[@]}" -gt 0 ]]; then
   DEBIAN_FRONTEND=noninteractive apt-get purge -y "${new_packages[@]}"
   DEBIAN_FRONTEND=noninteractive apt-get autoremove --purge -y
 fi
-test -x /usr/local/bin/pitunes-native
-if ldd /usr/local/bin/pitunes-native | grep -q 'not found'; then
+if [[ ! -x /usr/bin/pitunes-native ]]; then
+  dpkg -L pitunes-native >&2
+  echo 'Native package did not install the expected /usr/bin executable.' >&2; exit 1
+fi
+if ldd /usr/bin/pitunes-native | grep -q 'not found'; then
   echo 'Native runtime has missing libraries.' >&2; exit 1
 fi
 install -d /opt/pitunes/config

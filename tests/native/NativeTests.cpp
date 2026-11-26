@@ -135,6 +135,16 @@ private slots:
         auto *temporary = new LibraryModel(&api); temporary->reload(); delete temporary;
         QTest::qWait(200); // Pending callbacks must not dereference a deleted model.
     }
+    void libraryRecoversWhenBackendStartsLater() {
+        HttpFixture server; int requests = 0;
+        server.respond = [&requests](QByteArray) {
+            if (++requests == 1) return HttpFixture::Response{"{}", 0, 503};
+            return HttpFixture::Response{"{\"albums\":[{\"id\":\"9\",\"title\":\"Ready later\"}],\"total\":1}"};
+        };
+        ApiClient api(server.url()); LibraryModel library(&api); library.reload();
+        QTRY_COMPARE(requests, 1); QTRY_COMPARE_WITH_TIMEOUT(library.rowCount(), 1, 5000);
+        QCOMPARE(library.album(0)->id, QString("9")); QCOMPARE(requests, 2);
+    }
     void paginatesBeyondFiveThousand() {
         HttpFixture server;
         server.respond = [](QByteArray req) {
