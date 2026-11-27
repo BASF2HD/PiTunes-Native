@@ -67,7 +67,8 @@ protected:
         QToolButton::paintEvent(event);
         if (!property("activeBrowse").toBool()) return;
         QPainter painter(this);
-        painter.fillRect(0, height() - 2, width(), 2, QColor("#e0e3ee"));
+        const int inset = width() / 10;
+        painter.fillRect(inset, height() - 2, width() - 2 * inset, 2, QColor("#e0e3ee"));
     }
 };
 

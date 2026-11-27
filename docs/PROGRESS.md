@@ -239,8 +239,7 @@ station shelves. Browse changes keep MPD’s queue independent. Saved stations a
 played by ID from the cover double-click or station action. The centred library
 search uses both result types. Trackpad wheel events stay inside scrollable lists,
 track titles can be selected, the footer has a full-view button, and Settings can
-browse folders on the server. The footer underline spans the responsive width of
-the active tab. Album rail dragging uses direct selection while held.
+browse folders on the server. The footer underline scales with the active tab and is inset from both edges. Album rail dragging uses direct selection while held.
 NaviGlassPlayer’s independent position and rotation timing is applied to the
 existing 36-degree geometry, with stable rail-based stacking.
 
