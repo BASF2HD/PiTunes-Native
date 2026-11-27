@@ -7,6 +7,7 @@
 namespace PiTunes {
 namespace {
 constexpr int tapRadius = 2;
+constexpr int menuRadius = 6;
 
 QImage blurPass(const QImage &source, bool horizontal) {
     const QSize size = source.size();
@@ -94,9 +95,11 @@ void FrostedPanel::paintEvent(QPaintEvent *) {
 }
 
 FrostedMenu::FrostedMenu(CoverFlowWidget *stage, QWidget *parent) : QMenu(parent), m_stage(stage) {
+    setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
+    setAutoFillBackground(false);
     setStyleSheet(
-        "QMenu { background: transparent; color: #f0f2fa; border: 1px solid transparent; padding: 4px; }"
+        "QMenu { background: transparent; color: #f0f2fa; border: 0; padding: 5px; }"
         "QMenu::item { padding: 6px 20px 6px 25px; border-radius: 4px; }"
         "QMenu::item:selected { background: rgba(206,219,248,46); }"
         "QMenu::separator { height: 1px; margin: 4px 8px; background: rgba(240,245,255,30); }");
@@ -119,7 +122,19 @@ bool FrostedMenu::event(QEvent *event) {
 }
 
 void FrostedMenu::paintEvent(QPaintEvent *event) {
-    paintGlass(this, m_backdrop, QColor(12, 15, 24, 168), 35, 6);
+    {
+        QPainter painter(this);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(rect(), Qt::transparent);
+    }
+    paintGlass(this, m_backdrop, QColor(12, 15, 24, 168), 35, menuRadius);
     QMenu::paintEvent(event);
+}
+
+void FrostedMenu::resizeEvent(QResizeEvent *event) {
+    QMenu::resizeEvent(event);
+    QPainterPath outline;
+    outline.addRoundedRect(QRectF(rect()), menuRadius, menuRadius);
+    setMask(QRegion(outline.toFillPolygon().toPolygon()));
 }
 } // namespace PiTunes

@@ -33,6 +33,7 @@ public:
 protected:
     bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     QPointer<CoverFlowWidget> m_stage;

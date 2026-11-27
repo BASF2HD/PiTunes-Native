@@ -22,6 +22,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 | ADR-014 | Project the cover face and its reflection onto a shared floor | A projection makes both foot edges and reflection widths follow the same turn. Mask reflections by cover order, then paint the faces so a reflection cannot erase its neighbour's artwork. |
 | ADR-015 | Anchor native overlays to the cover stage | Search, its touch keyboard, the caption actions and transport stay out of the cover layout. The album strip is composited over the reflections. Footer menus and the drawer suspend the five-second idle return to the playing album. |
 | ADR-016 | Frost player popups with a bounded QPainter backdrop | The drawer, search, details and menus sample artwork and reflections at reduced resolution and reuse a blurred image until their position or the underlying artwork changes. The effect works without a desktop compositor or continuous repaint timer. |
+| ADR-017 | Store caption typography as a local display preference | The Font tab sets title, artist or singer, and album pixel sizes independently. The Qt stage reserves space for all three and fits them on smaller displays. The preferences use QSettings and stay separate from appliance data. |
 
 Do not infer approved native update, image or hardware support from these design
 decisions. Every target requires package, boot, input, audio and resource evidence.

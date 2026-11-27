@@ -47,7 +47,7 @@ private:
     void watchBrowsePopup(QMenu *menu);
     void placeOverlays();
     void refreshFavourites();
-    void updateFavouriteHeart();
+    void updateFavouriteHearts();
     void toggleFavourite(const QString &id, bool album);
     void showCaptionActions();
     void showSubjectActions(const QPoint &anchor, const Album &album, const Track &track,
@@ -78,7 +78,7 @@ private:
     QString m_albumScope, m_albumSort = "year-desc";
     QString m_songScope = "all", m_songSort, m_artistSort = "year-desc", m_playlistSort;
     QString m_currentPlaylistId, m_currentPlaylistName;
-    QSet<QString> m_favourites, m_pendingFavourites;
+    QSet<QString> m_albumFavourites, m_trackFavourites, m_pendingFavourites;
     int m_pendingAlbumRow = -1;
     quint64 m_playerGeneration = 0, m_drawerGeneration = 0, m_favouritesRevision = 0;
     quint64 m_pendingInspection = 0;

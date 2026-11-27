@@ -45,6 +45,20 @@ public:
     explicit AlbumStrip(QWidget *parent) : QSlider(Qt::Horizontal, parent) {}
 
 protected:
+    void resizeEvent(QResizeEvent *event) override {
+        QSlider::resizeEvent(event);
+        const int width = qBound(36, this->width() * 3 / 20, 180);
+        if (width == m_thumbWidth) return;
+        m_thumbWidth = width;
+        setStyleSheet(QString(
+            "QSlider { background: transparent; }"
+            "QSlider::groove:horizontal { height: 16px; background: transparent; "
+            "border-left: 1px solid rgba(210,218,235,52); border-right: 1px solid rgba(210,218,235,52); }"
+            "QSlider::handle:horizontal { width: %1px; margin: 0; border: 1px solid rgba(225,232,245,145); "
+            "border-radius: 7px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #5b5f65,stop:0.23 #222429,stop:0.56 #07080a,stop:1 #181a1f); }").arg(width));
+    }
+
     void mousePressEvent(QMouseEvent *event) override {
         QStyleOptionSlider option;
         initStyleOption(&option);
@@ -61,6 +75,9 @@ protected:
         }
         QSlider::mousePressEvent(event);
     }
+
+private:
+    int m_thumbWidth = 0;
 };
 }
 
@@ -72,6 +89,13 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_artwork = new ArtworkCache(m_api, reduced ? 6 : 12, this);
     m_flow = new CoverFlowWidget(m_library, m_artwork, this);
     m_flow->setReducedMotion(reduced);
+    const CaptionFontSizes defaults;
+    QSettings preferences;
+    m_flow->setCaptionFontSizes({
+        preferences.value("native/captionTitleSize", defaults.title).toInt(),
+        preferences.value("native/captionArtistSize", defaults.artist).toInt(),
+        preferences.value("native/captionAlbumSize", defaults.album).toInt()
+    });
     auto *root = new QWidget(this); auto *layout = new QVBoxLayout(root);
     layout->setContentsMargins(20, 12, 20, 10); layout->setSpacing(4); setCentralWidget(root);
     root->setStyleSheet(
@@ -231,12 +255,6 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_albumStrip->setRange(0, 0);
     m_albumStrip->setEnabled(false);
     m_albumStrip->setAccessibleName("Browse albums");
-    m_albumStrip->setStyleSheet(
-        "QSlider { background: transparent; }"
-        "QSlider::groove:horizontal { height: 16px; background: transparent; "
-        "border-left: 1px solid rgba(210,218,235,52); border-right: 1px solid rgba(210,218,235,52); }"
-        "QSlider::handle:horizontal { width: 30px; margin: 2px 0; border: 1px solid #656b79; border-radius: 5px;"
-        "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #444651,stop:0.54 #111216,stop:1 #060609); }");
     rail->addWidget(coverBack);
     rail->addWidget(m_albumStrip, 1);
     rail->addWidget(coverForward);
@@ -260,7 +278,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_message->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_message);
     m_message->hide();
-    m_flow->installEventFilter(this);
+    connect(m_flow, &CoverFlowWidget::captionLayoutChanged, this, &MainWindow::placeOverlays);
     m_searchPanel->installEventFilter(this);
     m_snapBack.setSingleShot(true);
     m_snapBack.setInterval(5000);
@@ -500,10 +518,16 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
     action(more, PlayerIcon::Stop, "Stop playback", [this] { command("/api/player/stop"); });
 
     auto *settings = tab(PlayerIcon::Settings, "Settings");
-    action(settings, PlayerIcon::Settings, "Appliance settings", [this] {
-        if (m_demo) { setMessage("Connect a backend for appliance settings"); return; }
-        auto *dialog = new SettingsDialog(m_api, this);
+    action(settings, PlayerIcon::Settings, "Application settings", [this] {
+        auto *dialog = new SettingsDialog(m_demo ? nullptr : m_api, m_flow->captionFontSizes(), this);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(dialog, &SettingsDialog::captionFontSizesChanged, this, [this](CaptionFontSizes sizes) {
+            m_flow->setCaptionFontSizes(sizes);
+            QSettings preferences;
+            preferences.setValue("native/captionTitleSize", sizes.title);
+            preferences.setValue("native/captionArtistSize", sizes.artist);
+            preferences.setValue("native/captionAlbumSize", sizes.album);
+        });
         connect(dialog, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
         dialog->open();
     });
@@ -533,8 +557,7 @@ void MainWindow::browseSongs() {
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
-    if ((watched == m_flow && event->type() == QEvent::Resize) ||
-        (watched == m_searchPanel && event->type() == QEvent::LayoutRequest && m_searchPanel->isVisible())) {
+    if (watched == m_searchPanel && event->type() == QEvent::LayoutRequest && m_searchPanel->isVisible()) {
         placeOverlays();
     }
     return QMainWindow::eventFilter(watched, event);
@@ -737,10 +760,13 @@ void MainWindow::showTracks(const QString &title, const QVector<Track> &tracks, 
     connect(drawer, &TrackDrawer::albumFavouriteRequested, this, [this, albumId] {
         toggleFavourite(albumId, true);
     });
+    connect(drawer, &TrackDrawer::trackFavouriteRequested, this, [this, tracks](int row) {
+        if (row >= 0 && row < tracks.size()) toggleFavourite(tracks[row].file, false);
+    });
     drawer->open();
     placeOverlays();
     refreshFavourites();
-    updateFavouriteHeart();
+    updateFavouriteHearts();
 }
 
 namespace {
@@ -760,40 +786,46 @@ void MainWindow::refreshFavourites() {
     m_api->get("/api/library/favourites", [this, revision](QJsonObject o, QString error) {
         m_favouritesLoading = false;
         if (!error.isEmpty() || revision != m_favouritesRevision) return;
-        m_favourites.clear();
-        for (const auto &value : o["albums"].toArray()) m_favourites.insert(favouriteKey(textValue(value), true));
-        for (const auto &value : o["tracks"].toArray()) m_favourites.insert(favouriteKey(textValue(value), false));
+        m_albumFavourites.clear();
+        m_trackFavourites.clear();
+        for (const auto &value : o["albums"].toArray()) m_albumFavourites.insert(textValue(value));
+        for (const auto &value : o["tracks"].toArray()) m_trackFavourites.insert(textValue(value));
         m_favouritesReady = true;
-        updateFavouriteHeart();
+        updateFavouriteHearts();
     });
 }
 
-void MainWindow::updateFavouriteHeart() {
-    if (m_trackDrawer) m_trackDrawer->setAlbumFavourite(
-        m_favourites.contains(favouriteKey(m_drawerAlbumId, true)), m_favouritesReady || m_demo);
+void MainWindow::updateFavouriteHearts() {
+    if (m_trackDrawer) {
+        const bool ready = m_favouritesReady || m_demo;
+        m_trackDrawer->setAlbumFavourite(m_albumFavourites.contains(m_drawerAlbumId), ready);
+        m_trackDrawer->setTrackFavourites(m_trackFavourites, ready);
+    }
     emit favouritesChanged();
 }
 
 void MainWindow::toggleFavourite(const QString &id, bool album) {
     const auto key = favouriteKey(id, album);
     if (id.isEmpty() || (!m_favouritesReady && !m_demo) || m_pendingFavourites.contains(key)) {
-        updateFavouriteHeart();
+        updateFavouriteHearts();
         return;
     }
-    const bool starred = !m_favourites.contains(key);
-    if (starred) m_favourites.insert(key);
-    else m_favourites.remove(key);
-    updateFavouriteHeart();
+    auto &favourites = album ? m_albumFavourites : m_trackFavourites;
+    const bool starred = !favourites.contains(id);
+    if (starred) favourites.insert(id);
+    else favourites.remove(id);
+    updateFavouriteHearts();
     if (m_demo) return;
     ++m_favouritesRevision;
     m_pendingFavourites.insert(key);
     m_api->post("/api/library/favourites", {{album ? "albumId" : "trackId", id}, {"starred", starred}},
-        [this, key, starred](QJsonObject, QString error) {
+        [this, key, id, album, starred](QJsonObject, QString error) {
             m_pendingFavourites.remove(key);
             if (error.isEmpty()) return;
-            if (starred) m_favourites.remove(key);
-            else m_favourites.insert(key);
-            updateFavouriteHeart();
+            auto &favourites = album ? m_albumFavourites : m_trackFavourites;
+            if (starred) favourites.remove(id);
+            else favourites.insert(id);
+            updateFavouriteHearts();
             setMessage(error);
         });
 }
@@ -833,16 +865,17 @@ void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, co
                 });
         });
     add->setEnabled(!id.isEmpty() && !m_demo);
-    auto *favourite = menu->addAction(QString(), this, [this, id, albumContext] { toggleFavourite(id, albumContext); });
-    const auto labelFavourite = [this, favourite, id, albumContext] {
-        const bool starred = m_favourites.contains(favouriteKey(id, albumContext));
-        favourite->setText(starred ? "Remove favourite" : "Favourite");
-        favourite->setIcon(playerIcon(starred ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite));
-        favourite->setEnabled(!id.isEmpty() && (m_favouritesReady || m_demo));
-    };
-    connect(this, &MainWindow::favouritesChanged, menu, labelFavourite);
-    labelFavourite();
-    refreshFavourites();
+    if (row < 0) {
+        auto *favourite = menu->addAction(QString(), this, [this, id, albumContext] { toggleFavourite(id, albumContext); });
+        const auto labelFavourite = [this, favourite, id, albumContext] {
+            const bool starred = (albumContext ? m_albumFavourites : m_trackFavourites).contains(id);
+            favourite->setText(starred ? "Remove favourite" : "Favourite");
+            favourite->setEnabled(!id.isEmpty() && (m_favouritesReady || m_demo));
+        };
+        connect(this, &MainWindow::favouritesChanged, menu, labelFavourite);
+        labelFavourite();
+        refreshFavourites();
+    }
     menu->addAction("More info", this, [this, album, track, row] { showMediaInfo(album, track, row); });
     if (!list.isEmpty()) {
         menu->addSeparator();

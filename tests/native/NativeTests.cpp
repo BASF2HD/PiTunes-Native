@@ -3,6 +3,7 @@
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
 #include "ui/MediaInfoPanel.h"
+#include "ui/SettingsDialog.h"
 #include "ui/TrackDrawer.h"
 #include <QBuffer>
 #include <QDialog>
@@ -13,6 +14,9 @@
 #include <QPointer>
 #include <QSignalSpy>
 #include <QSlider>
+#include <QSpinBox>
+#include <QStyleOptionSlider>
+#include <QTabWidget>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
@@ -62,6 +66,7 @@ public:
 class NativeTests : public QObject {
     Q_OBJECT
 private slots:
+    void initTestCase() { QApplication::setStyle("Fusion"); }
     void callbackCanDestroyItsApiClient() {
         HttpFixture server; auto *api = new ApiClient(server.url()); QPointer<ApiClient> guard(api);
         bool done = false;
@@ -146,7 +151,7 @@ private slots:
         window.show();
         const QMap<QString, QString> items{
             {"Albums", "Favourite"}, {"Songs", "Group by album"}, {"Artists", "Browse artists"},
-            {"Playlists", "Playlist order"}, {"More", "Genres"}, {"Settings", "Appliance settings"}
+            {"Playlists", "Playlist order"}, {"More", "Genres"}, {"Settings", "Application settings"}
         };
         int found = 0;
         for (auto *button : window.findChildren<QToolButton *>()) {
@@ -163,6 +168,50 @@ private slots:
             menu->hide();
         }
         QCOMPARE(found, items.size());
+    }
+    void fontTabResizesAndPersistsEachCaptionLine() {
+        HttpFixture server;
+        MainWindow window(server.url(), true);
+        window.resize(1280, 680);
+        window.show();
+        QToolButton *settings = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Settings") settings = button;
+        QVERIFY(settings);
+        QTest::mouseClick(settings, Qt::LeftButton);
+        auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        QVERIFY(menu);
+        for (auto *action : menu->actions()) {
+            if (action->text() != "Application settings") continue;
+            menu->hide();
+            action->trigger();
+        }
+        auto *dialog = window.findChild<SettingsDialog *>();
+        QVERIFY(dialog);
+        auto *tabs = dialog->findChild<QTabWidget *>();
+        QVERIFY(tabs);
+        QCOMPARE(tabs->tabText(tabs->currentIndex()), QString("Font"));
+        auto *title = dialog->findChild<QSpinBox *>("captionTitleSize");
+        auto *artist = dialog->findChild<QSpinBox *>("captionArtistSize");
+        auto *album = dialog->findChild<QSpinBox *>("captionAlbumSize");
+        QVERIFY(title); QVERIFY(artist); QVERIFY(album);
+        const auto original = window.coverFlow()->captionFontSizes();
+        title->setValue(35);
+        artist->setValue(21);
+        album->setValue(18);
+        const auto updated = window.coverFlow()->captionFontSizes();
+        QCOMPARE(updated.title, 35);
+        QCOMPARE(updated.artist, 21);
+        QCOMPARE(updated.album, 18);
+        MainWindow reopened(server.url(), true);
+        auto persisted = reopened.coverFlow()->captionFontSizes();
+        QCOMPARE(persisted.title, 35);
+        QCOMPARE(persisted.artist, 21);
+        QCOMPARE(persisted.album, 18);
+        title->setValue(original.title);
+        artist->setValue(original.artist);
+        album->setValue(original.album);
+        QCOMPARE(server.requests.size(), 0);
     }
     void returnsToPlayingAlbumAfterBrowsingAndClosingDrawer() {
         HttpFixture server;
@@ -335,6 +384,17 @@ private slots:
             if (slider->accessibleName() == "Browse albums") strip = slider;
         QVERIFY(strip);
         QTRY_COMPARE(strip->maximum(), 3);
+        QStyleOptionSlider style;
+        style.initFrom(strip);
+        style.minimum = strip->minimum();
+        style.maximum = strip->maximum();
+        style.orientation = Qt::Horizontal;
+        style.state |= QStyle::State_Horizontal;
+        style.subControls = QStyle::SC_SliderHandle | QStyle::SC_SliderGroove;
+        const auto handle = strip->style()->subControlRect(QStyle::CC_Slider, &style, QStyle::SC_SliderHandle, strip);
+        const auto groove = strip->style()->subControlRect(QStyle::CC_Slider, &style, QStyle::SC_SliderGroove, strip);
+        QVERIFY(handle.height() >= groove.height() - 1);
+        QVERIFY(handle.width() > 36);
         QTest::mouseClick(strip, Qt::LeftButton, Qt::NoModifier, QPoint(strip->width() - 2, strip->height() / 2));
         QTRY_COMPARE(window.coverFlow()->currentIndex(), 3);
         QTRY_COMPARE(window.coverFlow()->accessibleDescription(), QString("Last"));
@@ -399,6 +459,9 @@ private slots:
                     {"file":"album/first.flac","title":"First","artist":"Singer One","trackNumber":1},
                     {"file":"album/second.flac","title":"Second","artist":"Singer Two","trackNumber":2,"duration":150}]})"};
             }
+            if (request.startsWith("GET /api/library/favourites")) {
+                return HttpFixture::Response{R"({"albums":[],"tracks":["album/first.flac"]})"};
+            }
             return HttpFixture::Response{"{}"};
         };
         MainWindow window(server.url());
@@ -423,9 +486,27 @@ private slots:
         QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(row.right() - 8, row.center().y()));
         auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
         QVERIFY(menu);
-        for (const auto *action : menu->actions()) QVERIFY(action->text() != "Play song");
+        for (const auto *action : menu->actions()) {
+            QVERIFY(action->text() != "Play song");
+            QVERIFY(!action->text().contains("favourite", Qt::CaseInsensitive));
+        }
         QVERIFY(playRequest().isEmpty());
         menu->hide();
+        QTRY_VERIFY(list->model()->index(0, 0).data(Qt::AccessibleTextRole).toString().endsWith(", Favourite"));
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(row.right() - 107, row.center().y()));
+        QTRY_VERIFY(second.data(Qt::AccessibleTextRole).toString().endsWith(", Favourite"));
+        QVERIFY(playRequest().isEmpty());
+        const auto favouriteRequest = [&server] {
+            for (const auto &request : server.requests) {
+                if (request.startsWith("POST /api/library/favourites ")) return request;
+            }
+            return QByteArray();
+        };
+        QTRY_VERIFY(!favouriteRequest().isEmpty());
+        const auto favourite = favouriteRequest();
+        const auto saved = QJsonDocument::fromJson(favourite.mid(favourite.indexOf("\r\n\r\n") + 4)).object();
+        QCOMPARE(saved["trackId"].toString(), QString("album/second.flac"));
+        QVERIFY(saved["starred"].toBool());
         QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, row.center());
         QTRY_VERIFY(!playRequest().isEmpty());
         const auto request = playRequest();
@@ -713,6 +794,24 @@ private slots:
             QVERIFY(qAbs(velocity - halfway.velocity) < .05);
         }
     }
+    void fastCarouselKeepsCoversBroadAndReachesTheGestureDestination() {
+        CoverMotion motion;
+        for (int frame = 0; frame < 120; ++frame) {
+            const auto next = advanceCarouselMotion(motion, 12., .016, 20.);
+            QVERIFY(next.position >= motion.position - 1.e-8);
+            QVERIFY(next.position <= 12. + 1.e-8);
+            QVERIFY(next.position - motion.position <= .321);
+            QVERIFY(next.velocity <= 20.);
+            motion = next;
+        }
+        QVERIFY(qAbs(motion.position - 12.) < .001);
+        const auto passing = projectCover(0., 100., {}, 20.);
+        QVERIFY(passing.face.boundingRect().height() >= 85.);
+        QVERIFY(passing.face.boundingRect().height() < 100.);
+        const auto left = projectCover(-.5, 100., {}, 20.);
+        const auto right = projectCover(.5, 100., {}, 20.);
+        QVERIFY(right.face[0].x() > left.face[1].x());
+    }
     void nearerReflectionHidesItsNeighbour() {
         HttpFixture server;
         server.respond = [](const QByteArray &) {
@@ -793,6 +892,9 @@ private slots:
         FrostedMenu menu(&widget, &widget);
         menu.addAction("Menu");
         menu.popup(widget.mapToGlobal(QPoint(420, 100)));
+        QVERIFY(!menu.mask().isEmpty());
+        QVERIFY(!menu.mask().contains(QPoint(0, 0)));
+        QVERIFY(menu.mask().contains(menu.rect().center()));
         const auto backdrop = [&] {
             const auto image = menu.grab().toImage();
             return image.pixelColor(image.width() / 2, qRound(7 * image.devicePixelRatio()));

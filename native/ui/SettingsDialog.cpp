@@ -14,11 +14,13 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 namespace PiTunes {
-SettingsDialog::SettingsDialog(ApiClient *api, QWidget *parent) : QDialog(parent) {
+SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *parent) : QDialog(parent) {
     setWindowTitle("PiTunes Settings"); resize(760, 620);
     auto *layout = new QVBoxLayout(this);
     auto *tabs = new QTabWidget(this); layout->addWidget(tabs, 1);
@@ -41,6 +43,47 @@ SettingsDialog::SettingsDialog(ApiClient *api, QWidget *parent) : QDialog(parent
         auto *b = new QPushButton(text, this); b->setMinimumHeight(38); form->addRow(b);
         connect(b, &QPushButton::clicked, this, std::move(action)); return b;
     };
+    auto *font = page("Font");
+    auto *heading = new QLabel("Album information panel", this);
+    auto headingFont = heading->font();
+    headingFont.setWeight(QFont::DemiBold);
+    heading->setFont(headingFont);
+    font->addRow(heading);
+    const auto sizeControl = [font, this](const QString &label, const QString &name, int value) {
+        auto *size = new QSpinBox(this);
+        size->setObjectName(name);
+        size->setAccessibleName(label + " font size");
+        size->setRange(CaptionFontSizes::minimum, CaptionFontSizes::maximum);
+        size->setFixedWidth(105);
+        size->setSuffix(" px");
+        size->setValue(value);
+        font->addRow(label, size);
+        return size;
+    };
+    auto *title = sizeControl("Title", "captionTitleSize", fonts.title);
+    auto *artist = sizeControl("Artist / singer", "captionArtistSize", fonts.artist);
+    auto *album = sizeControl("Album", "captionAlbumSize", fonts.album);
+    const auto preview = [this, title, artist, album] {
+        emit captionFontSizesChanged({title->value(), artist->value(), album->value()});
+    };
+    for (auto *control : {title, artist, album}) {
+        connect(control, QOverload<int>::of(&QSpinBox::valueChanged), this, preview);
+    }
+    auto *reset = button(font, "Reset font sizes", [title, artist, album, preview] {
+        const CaptionFontSizes defaults;
+        const QSignalBlocker preventTitle(title), preventArtist(artist), preventAlbum(album);
+        title->setValue(defaults.title);
+        artist->setValue(defaults.artist);
+        album->setValue(defaults.album);
+        preview();
+    });
+    reset->setMaximumWidth(170);
+    auto *close = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    if (!api) {
+        layout->addWidget(close);
+        return;
+    }
 
     auto *library = page("Library");
     auto *music = field(library, "Music folder");
@@ -173,7 +216,6 @@ SettingsDialog::SettingsDialog(ApiClient *api, QWidget *parent) : QDialog(parent
                 api->post("/api/system/control", {{"action", action}}, result);
         });
     }
-    auto *close = new QDialogButtonBox(QDialogButtonBox::Close, this); layout->addWidget(close);
-    connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    layout->addWidget(close);
 }
 }

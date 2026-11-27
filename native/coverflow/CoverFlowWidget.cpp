@@ -27,6 +27,7 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     : QWidget(parent), m_model(model), m_artwork(artwork) {
     setFocusPolicy(Qt::StrongFocus); setAttribute(Qt::WA_AcceptTouchEvents);
     setMinimumSize(240, 150); setAccessibleName("Album CoverFlow");
+    updateCaptionLayout();
     m_timer.setTimerType(Qt::PreciseTimer);
 #ifdef Q_OS_MACOS
     m_timer.setInterval(16);
@@ -54,7 +55,7 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
         // Increase damping when a fast approach would carry the cover past
         // its landing. Keep both position and velocity continuous at release.
         const double approach = remaining == 0. ? 0. : m_motion.velocity / remaining;
-        moveTo(landing, true, qBound(10., approach, 24.));
+        moveTo(landing, true, qBound(10., approach, 24.), true);
         if (!m_timer.isActive()) emit navigationSettled();
     });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
@@ -81,7 +82,8 @@ int CoverFlowWidget::visibleCoverCount() const {
 }
 double CoverFlowWidget::coverSize() const {
     const double fraction = m_transportInset > 0 ? .77 : .65;
-    return qMax(1., qMin(width() * .46, qMin(height() * fraction, height() * .965 - m_transportInset - 58.)));
+    return qMax(1., qMin(width() * .46, qMin(height() * fraction,
+                  height() * .965 - m_transportInset - m_captionHeight)));
 }
 QRect CoverFlowWidget::centreCoverRect() const {
     const double size = coverSize();
@@ -94,14 +96,43 @@ QRect CoverFlowWidget::captionRect() const {
 }
 void CoverFlowWidget::setTransportInset(int pixels) {
     m_transportInset = pixels;
+    updateCaptionLayout();
     prefetch();
     update();
+}
+void CoverFlowWidget::setCaptionFontSizes(CaptionFontSizes sizes) {
+    const auto limit = [](int pixels) { return qBound(CaptionFontSizes::minimum, pixels, CaptionFontSizes::maximum); };
+    m_captionFontSizes = {limit(sizes.title), limit(sizes.artist), limit(sizes.album)};
+    updateCaptionLayout();
+    prefetch();
+    update();
+    emit captionLayoutChanged();
+    emit artworkBackdropChanged();
+}
+void CoverFlowWidget::updateCaptionLayout() {
+    m_captionPixels = {m_captionFontSizes.title, m_captionFontSizes.artist, m_captionFontSizes.album};
+    const auto lineHeight = [this](int pixels, bool title) {
+        QFont type = font();
+        type.setWeight(title ? QFont::DemiBold : QFont::Normal);
+        type.setPixelSize(pixels);
+        return QFontMetrics(type).height() + 1;
+    };
+    const auto totalHeight = [&] {
+        return lineHeight(m_captionPixels[0], true) + lineHeight(m_captionPixels[1], false)
+            + lineHeight(m_captionPixels[2], false);
+    };
+    const int budget = qMax(35, (height() - m_transportInset) * 3 / 10);
+    const int requestedHeight = totalHeight();
+    if (requestedHeight > budget) {
+        for (auto &pixels : m_captionPixels) pixels = qMax(8, pixels * budget / requestedHeight);
+    }
+    m_captionHeight = qMax(55, totalHeight() + 12);
 }
 QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     // Cull once a cover's inner edge leaves the viewport. Fractional positions
     // let edge covers slide out naturally during navigation.
     const double halfViewport = width() / (2. * coverSize());
-    const double screenReach = coverReach(halfViewport + .11 * carouselAmount(m_motion.velocity));
+    const double screenReach = coverReach(halfViewport + .045 * carouselAmount(m_motion.velocity));
     const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
     const double reach = qMin(screenReach, double(cacheReach));
     return {qMax(0, int(std::ceil(position - reach))),
@@ -112,17 +143,19 @@ void CoverFlowWidget::select(int index, bool animate) {
     m_trackpadActive = false;
     moveTo(index, animate, 15.);
 }
-void CoverFlowWidget::moveTo(double position, bool animate, double response) {
+void CoverFlowWidget::moveTo(double position, bool animate, double response, bool trackpad) {
     position = qBound(0., position, double(qMax(0, m_model->rowCount() - 1)));
     const bool moving = animate && !m_reduced && isVisible();
     const int index = qRound(position);
     if (!moving) position = index;
-    if (position == m_goal && (m_response == response || !m_timer.isActive()) && (moving || !m_timer.isActive())) return;
+    if (position == m_goal && (m_response == response || !m_timer.isActive()) &&
+        (moving || !m_timer.isActive()) && m_trackpadMotion == trackpad) return;
     if (m_timer.isActive()) sampleMotion();
     const bool selectionChangedNow = m_target != index;
     m_target = index;
     m_goal = position;
     m_response = response;
+    m_trackpadMotion = trackpad;
     if (moving) {
         m_start = m_motion;
         m_clock.restart();
@@ -136,7 +169,13 @@ void CoverFlowWidget::moveTo(double position, bool animate, double response) {
     if (selectionChangedNow) emit selectionChanged(index);
 }
 void CoverFlowWidget::sampleMotion() {
-    m_motion = advanceCoverMotion(m_start, m_goal, m_clock.nsecsElapsed() / 1.e9, m_response);
+    const double elapsed = m_clock.nsecsElapsed() / 1.e9;
+    if (m_trackpadMotion) {
+        m_motion = advanceCarouselMotion(m_motion, m_goal, elapsed, m_response);
+        m_clock.restart();
+    } else {
+        m_motion = advanceCoverMotion(m_start, m_goal, elapsed, m_response);
+    }
     const double last = qMax(0, m_model->rowCount() - 1);
     if (m_motion.position < 0. || m_motion.position > last) {
         m_motion = {qBound(0., m_motion.position, last), 0.};
@@ -146,6 +185,7 @@ void CoverFlowWidget::sampleMotion() {
 }
 void CoverFlowWidget::settle() {
     m_timer.stop();
+    m_trackpadMotion = false;
     m_motion = {m_goal, 0.};
     updateCaption();
     prefetch();
@@ -221,7 +261,9 @@ void CoverFlowWidget::prefetch() {
 }
 void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
+    updateCaptionLayout();
     prefetch();
+    emit captionLayoutChanged();
 }
 void CoverFlowWidget::paintEvent(QPaintEvent *) {
     ++m_paints;
@@ -258,13 +300,12 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
     }
     const auto &caption = m_caption;
     const auto textArea = captionRect();
+    painter.setClipRect(textArea);
     const int textWidth = textArea.width();
-    const int available = textArea.height();
     QFont font = painter.font();
     int lineTop = textArea.y();
     for (int i = 0; i < caption.size(); ++i) {
-        const int ideal = i == 0 ? qBound(16, width() / 48, 24) : qBound(13, width() / 68, 18);
-        font.setPixelSize(qMin(ideal, qMax(11, (available - 9) / qMax(1, caption.size()))));
+        font.setPixelSize(m_captionPixels[i]);
         font.setWeight(i == 0 ? QFont::DemiBold : QFont::Normal);
         painter.setFont(font);
         const auto metrics = painter.fontMetrics();
@@ -350,7 +391,7 @@ void CoverFlowWidget::wheelEvent(QWheelEvent *e) {
     const int dominant = std::abs(delta.y()) >= std::abs(delta.x()) ? delta.y() : delta.x();
     if (pixelScroll && !m_reduced && isVisible()) {
         m_trackpadActive = true;
-        moveTo(m_goal - dominant / 52., true, 24.);
+        moveTo(m_goal - dominant / 52., true, 24., true);
         m_trackpadIdle.start(85);
         e->accept();
         return;

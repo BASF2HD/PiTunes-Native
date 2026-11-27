@@ -21,18 +21,24 @@
 
 namespace PiTunes {
 namespace {
-enum TrackRole { SubtitleRole = Qt::UserRole + 1, NumberRole, DurationRole, FileRole };
+enum TrackRole { SubtitleRole = Qt::UserRole + 1, NumberRole, DurationRole, FileRole, FavouriteRole };
 constexpr int rowHeight = 45;
 constexpr int numberWidth = 34;
 constexpr int durationWidth = 56;
+constexpr int favouriteWidth = 32;
 constexpr int actionsWidth = 36;
 constexpr int textInset = 8;
+
+QRect favouriteRect(const QRect &row) {
+    return {row.right() + 1 - actionsWidth - durationWidth - favouriteWidth, row.top(), favouriteWidth, row.height()};
+}
 
 class TrackList : public QListView {
 public:
     using QListView::QListView;
     std::function<void(int)> playRow;
     std::function<void(const QModelIndex &)> showRowActions;
+    std::function<void(int)> favouriteRow;
     std::function<void()> dismiss;
 
 protected:
@@ -47,7 +53,9 @@ protected:
             && (event->pos() - m_pressPoint).manhattanLength() < QApplication::startDragDistance();
         QListView::mouseReleaseEvent(event);
         if (!clicked) return;
-        if (event->pos().x() >= visualRect(index).right() - actionsWidth + 1) showRowActions(index);
+        const QRect row = visualRect(index);
+        if (event->pos().x() >= row.right() - actionsWidth + 1) showRowActions(index);
+        else if (favouriteRect(row).contains(event->pos())) favouriteRow(index.row());
         else playRow(index.row());
     }
     void mouseDoubleClickEvent(QMouseEvent *event) override {
@@ -61,6 +69,10 @@ protected:
             return;
         }
         if (currentIndex().isValid()) {
+            if (event->key() == Qt::Key_Space && event->modifiers() == Qt::NoModifier) {
+                favouriteRow(currentIndex().row());
+                return;
+            }
             if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
                 playRow(currentIndex().row());
                 return;
@@ -100,6 +112,7 @@ public:
 
     const QString &currentFile() const { return m_currentFile; }
     void setPulseTime(qint64 elapsed) { m_elapsed = elapsed; }
+    void setFavouritesReady(bool ready) { m_favouritesReady = ready; }
 
     QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const override { return {0, rowHeight}; }
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
@@ -130,8 +143,13 @@ public:
         painter->drawText(QRect(trailing - durationWidth, row.top(), durationWidth - 5, row.height()),
                           Qt::AlignRight | Qt::AlignVCenter, index.data(DurationRole).toString());
         playerIcon(PlayerIcon::More).paint(painter, QRect(trailing + 10, row.center().y() - 8, 16, 16));
+        const auto heart = favouriteRect(row).center();
+        const bool hasFile = !index.data(FileRole).toString().isEmpty();
+        const auto icon = index.data(FavouriteRole).toBool() ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite;
+        playerIcon(icon).paint(painter, QRect(heart - QPoint(8, 8), QSize(16, 16)), Qt::AlignCenter,
+                               m_favouritesReady && hasFile ? QIcon::Normal : QIcon::Disabled);
 
-        const int width = qMax(0, trailing - durationWidth - row.left() - numberWidth - textInset);
+        const int width = qMax(0, favouriteRect(row).left() - row.left() - numberWidth - textInset);
         QRect text(row.left() + numberWidth, row.top(), width, row.height());
         const auto subtitle = index.data(SubtitleRole).toString();
         if (!subtitle.isEmpty()) {
@@ -182,11 +200,12 @@ private:
     QString m_currentFile;
     qint64 m_elapsed = -1;
     bool m_playing = false;
+    bool m_favouritesReady = false;
 };
 
 TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QString &year,
                          const QVector<Track> &tracks, bool albumContext)
-    : FrostedPanel(stage, QColor(10, 10, 20, 155)), m_stage(stage), m_heading(albumWithYear(title, year)) {
+    : FrostedPanel(stage, QColor(10, 10, 20, 200), 29), m_stage(stage), m_heading(albumWithYear(title, year)) {
     setObjectName("trackDrawer");
     setAccessibleName(m_heading);
     setAttribute(Qt::WA_DeleteOnClose);
@@ -262,6 +281,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     m_list = list;
     m_list->setObjectName("trackDrawerList");
     m_list->setAccessibleName("Songs");
+    m_list->setAccessibleDescription("Press Space on a song to toggle its favourite heart.");
     m_list->setUniformItemSizes(true);
     m_list->viewport()->setAutoFillBackground(false);
     m_list->setMouseTracking(true);
@@ -310,12 +330,13 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
         m_list->hide();
     }
     list->playRow = [this](int row) { emit playRequested(row); };
+    list->favouriteRow = [this](int row) { emit trackFavouriteRequested(row); };
     list->showRowActions = [this](const QModelIndex &index) { showTrackActions(index); };
     list->dismiss = [this] { emit dismissRequested(); };
     auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     escape->setContext(Qt::WidgetWithChildrenShortcut);
     connect(escape, &QShortcut::activated, this, &TrackDrawer::dismissRequested);
-    m_stage->installEventFilter(this);
+    connect(m_stage, &CoverFlowWidget::captionLayoutChanged, this, [this] { if (isVisible()) place(); });
 }
 
 void TrackDrawer::open() {
@@ -332,15 +353,10 @@ void TrackDrawer::hideEvent(QHideEvent *event) {
     QFrame::hideEvent(event);
 }
 
-bool TrackDrawer::eventFilter(QObject *watched, QEvent *event) {
-    if (watched == m_stage && event->type() == QEvent::Resize && isVisible()) place();
-    return QFrame::eventFilter(watched, event);
-}
-
 void TrackDrawer::place() {
     const auto cover = m_stage->centreCoverRect();
-    const int drawerWidth = qMin(m_stage->width(), qMax(316, cover.width()));
-    const int drawerHeight = qMin(m_stage->height() - cover.top() - 58, qMax(230, cover.height()));
+    const int drawerWidth = qMin(m_stage->width(), qMax(348, cover.width()));
+    const int drawerHeight = qMin(m_stage->height() - cover.top() - 58, qMax(140, cover.height()));
     setGeometry((m_stage->width() - drawerWidth) / 2, cover.top(), drawerWidth, drawerHeight);
     m_stage->setCaptionClearance(geometry().bottom() + 1);
     layout()->activate();
@@ -378,6 +394,22 @@ void TrackDrawer::setAlbumFavourite(bool starred, bool ready) {
     m_heart->setEnabled(ready);
 }
 
+void TrackDrawer::setTrackFavourites(const QSet<QString> &files, bool ready) {
+    auto *model = m_list->model();
+    for (int row = 0; row < model->rowCount(); ++row) {
+        const auto index = model->index(row, 0);
+        const bool starred = files.contains(index.data(FileRole).toString());
+        const bool previous = index.data(FavouriteRole).toBool();
+        if (previous == starred) continue;
+        auto summary = index.data(Qt::AccessibleTextRole).toString();
+        const QString suffix = ", Favourite";
+        if (previous) summary.chop(suffix.size());
+        model->setData(index, starred, FavouriteRole);
+        model->setData(index, starred ? summary + suffix : summary, Qt::AccessibleTextRole);
+    }
+    m_rowDelegate->setFavouritesReady(ready);
+    m_list->viewport()->update();
+}
 void TrackDrawer::syncPulse() {
     if (isVisible() && m_playing && !m_reduced) {
         for (const int row : m_activeRows) {

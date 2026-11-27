@@ -20,4 +20,5 @@ struct CoverMotion {
 };
 
 CoverMotion advanceCoverMotion(CoverMotion start, double target, double seconds, double response = 15.);
+CoverMotion advanceCarouselMotion(CoverMotion start, double target, double seconds, double response);
 } // namespace PiTunes

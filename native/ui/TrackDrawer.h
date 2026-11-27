@@ -4,6 +4,7 @@
 #include "models/Domain.h"
 #include <QElapsedTimer>
 #include <QFrame>
+#include <QSet>
 #include <QTimer>
 
 class QLabel;
@@ -23,6 +24,7 @@ public:
     void setPlayback(const PlayerState &state);
     void setReducedMotion(bool reduced);
     void setAlbumFavourite(bool starred, bool ready);
+    void setTrackFavourites(const QSet<QString> &files, bool ready);
     void open();
 
 signals:
@@ -30,9 +32,9 @@ signals:
     void playRequested(int row);
     void trackActionsRequested(int row, const QPoint &position);
     void albumFavouriteRequested();
+    void trackFavouriteRequested(int row);
 
 protected:
-    bool eventFilter(QObject *watched, QEvent *event) override;
     void hideEvent(QHideEvent *event) override;
 
 private:

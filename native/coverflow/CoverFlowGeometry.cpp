@@ -43,13 +43,16 @@ CoverQuads projectCover(double distance, double pixels, const QPointF &origin, d
     // An outgoing cover starts to turn as it leaves the front. An incoming
     // cover unwinds sooner and finishes with a nearly flat translation.
     // Both curves join the same resting poses with zero angular slope.
-    const double turn = t * t * (3. - 2. * t) - .16 * direction * shoulder;
-    const double yaw = sign * sideYaw * turn;
     const double rush = carouselAmount(velocity);
-    const double centre = sign * (railOffset(offset) - .11 * rush * turn);
-    // During a fast pass the front cover remains compact. It opens to its
-    // resting size as the rail slows instead of pulsing at every album index.
-    const double faceScale = 1. - .28 * rush * (1. - turn);
+    const double restingTurn = t * t * (3. - 2. * t) - .16 * direction * shoulder;
+    const double passing = std::clamp((t - .18) / .82, 0., 1.);
+    const double passingTurn = passing * passing * (3. - 2. * passing);
+    const double turn = restingTurn + rush * (passingTurn - restingTurn);
+    const double yaw = sign * sideYaw * turn;
+    // At speed the two front covers share a broad, nearly flat pass. Keep
+    // the side stack compact and leave room where the two faces cross.
+    const double centre = sign * (railOffset(offset) + rush * (.015 * shoulder - .045 * turn));
+    const double faceScale = 1. - .13 * rush * (1. - turn);
     // The turning edge comes forward slightly before settling onto the side.
     const double depth = sideDepth * turn - .045 * 4. * turn * (1. - turn);
     const double sine = std::sin(yaw);
@@ -72,7 +75,7 @@ double coverReach(double halfViewport) {
 }
 
 double carouselAmount(double velocity) {
-    const double t = std::clamp((std::abs(velocity) - 6.) / 14., 0., 1.);
+    const double t = std::clamp((std::abs(velocity) - 6.) / 12., 0., 1.);
     return t * t * (3. - 2. * t);
 }
 
@@ -84,5 +87,24 @@ CoverMotion advanceCoverMotion(CoverMotion start, double target, double seconds,
     const double decay = std::exp(-response * seconds);
     const double offset = displacement + slope * seconds;
     return {target + offset * decay, (slope - response * offset) * decay};
+}
+
+CoverMotion advanceCarouselMotion(CoverMotion start, double target, double seconds, double response) {
+    constexpr double speedLimit = 20.;
+    // Keep the full gesture destination while pacing the visible crossings.
+    // Use the normal spring until it would exceed the cruise speed.
+    for (double remaining = std::min(seconds, .12); remaining > 0.;) {
+        const double step = std::min(remaining, .008);
+        const auto next = advanceCoverMotion(start, target, step, response);
+        const double speed = std::clamp(next.velocity, -speedLimit, speedLimit);
+        if (speed == next.velocity) {
+            start = next;
+        } else {
+            const double previous = std::clamp(start.velocity, -speedLimit, speedLimit);
+            start = {start.position + (previous + speed) * .5 * step, speed};
+        }
+        remaining -= step;
+    }
+    return start;
 }
 } // namespace PiTunes

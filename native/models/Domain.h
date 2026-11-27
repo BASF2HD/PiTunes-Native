@@ -7,6 +7,13 @@ namespace PiTunes {
 QString textValue(const QJsonValue &value);
 double numberValue(const QJsonValue &value, double fallback = 0);
 bool boolValue(const QJsonValue &value);
+struct CaptionFontSizes {
+    static constexpr int minimum = 10;
+    static constexpr int maximum = 40;
+    int title = 25;
+    int artist = 16;
+    int album = 16;
+};
 struct Album {
     QString id, title, artist, year, artUrl;
     QString genre = {};

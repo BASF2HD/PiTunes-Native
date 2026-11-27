@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QWidget>
+#include <array>
 
 namespace PiTunes {
 class CoverFlowWidget : public QWidget {
@@ -25,6 +26,8 @@ public:
     QRect captionRect() const;
     int captionAlbumIndex() const { return m_captionRow; }
     void setTransportInset(int pixels);
+    CaptionFontSizes captionFontSizes() const { return m_captionFontSizes; }
+    void setCaptionFontSizes(CaptionFontSizes sizes);
     void paintArtworkBackdrop(QPainter &painter) const;
     void setPlayback(const PlayerState &state);
     void setCaptionClearance(int lowerEdge);
@@ -32,6 +35,7 @@ signals:
     void selectionChanged(int index);
     void navigationSettled();
     void artworkBackdropChanged();
+    void captionLayoutChanged();
     void activated(int index);
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -46,8 +50,9 @@ private:
     void prefetch();
     void sampleMotion();
     void settle();
-    void moveTo(double position, bool animate, double response);
+    void moveTo(double position, bool animate, double response, bool trackpad = false);
     void updateCaption();
+    void updateCaptionLayout();
     void paintCovers(QPainter &painter, double size, double top,
                      QVector<QPair<int, QPolygonF>> *hits = nullptr) const;
     double coverSize() const;
@@ -61,6 +66,7 @@ private:
     double m_goal = 0., m_response = 15.;
     double m_wheelRemainder = 0;
     bool m_trackpadActive = false;
+    bool m_trackpadMotion = false;
     int m_target = 0;
     int m_captionRow = -1;
     bool m_reduced = false, m_dragging = false;
@@ -73,6 +79,9 @@ private:
     bool m_captionShowsPlayback = false;
     int m_captionClearance = 0;
     int m_transportInset = 0;
+    CaptionFontSizes m_captionFontSizes;
+    std::array<int, 3> m_captionPixels{};
+    int m_captionHeight = 0;
     quint64 m_paints = 0;
 };
 } // namespace PiTunes

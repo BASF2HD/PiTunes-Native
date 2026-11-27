@@ -156,6 +156,25 @@ All 33 native cases passed in Debug and Release with Qt 5.15.19. All 32 Python
 cases and 24 JavaScript cases passed, including MPD bitrate pairing and the
 existing playback modes.
 
+Reviewed 53 consecutive frames of the supplied 60 fps clip beginning at
+55.28 s. Several broad, nearly front-facing covers cross the centre during
+the sustained swipe. The native fast path now holds a broader centre pass
+and paces trackpad travel at up to 20 albums per second. It keeps the full
+gesture destination and uses the same damped settle near the target. Checked
+a 2× synthetic trackpad replay on macOS. Physical gesture feel is pending.
+
+The drawer uses darker glass and a faint square border. Each song has a
+favourite heart before its duration, and the row action menu omits Favourite.
+Frameless popups clear the transparent corner pixels and use a rounded mask.
+The taller album thumb nearly fills its translucent rail and scales its width
+with the viewport. Application settings has a Font tab for title, artist or
+singer, and album text. Its local preferences apply immediately and persist
+across launches. Reviewed 800×480 and 1280×680 captures of the player, drawer,
+rounded menu and settings.
+All 35 native cases passed in Debug and Release with Qt 5.15.19. The
+regressions cover the Font tab, row favourites without playback, thumb
+geometry, rounded popup masks and the fast gesture destination.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;
