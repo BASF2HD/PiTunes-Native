@@ -2,6 +2,7 @@
 #include "models/LibraryModel.h"
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
+#include "ui/MediaInfoPanel.h"
 #include "ui/TrackDrawer.h"
 #include <QBuffer>
 #include <QDialog>
@@ -252,6 +253,69 @@ private slots:
             return action->text() == "More info";
         }));
         infoMenu->hide();
+    }
+    void moreInfoHydratesSongAndAlbumDetails() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) {
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Playing"},{"id":2,"title":"Other","albumArtist":"Album Artist","year":1984,"genre":"Soundtrack"}],"total":2})"};
+            }
+            if (request.startsWith("GET /api/player/state")) {
+                return HttpFixture::Response{R"({"status":{"state":"play","bitrate":920},"song":{"file":"a/song.flac","Title":"Playing song","albumId":1}})"};
+            }
+            if (request.startsWith("GET /api/library/album/1/tracks")) {
+                return HttpFixture::Response{R"({"tracks":[{"file":"a/other.flac","composer":"Wrong"},
+                    {"file":"a/song.flac","title":"Playing song","singer":"Singer","composer":"Composer","trackNumber":4,"duration":186}]})", 90};
+            }
+            if (request.startsWith("GET /api/library/album/2/tracks")) {
+                return HttpFixture::Response{R"({"tracks":[{"file":"b/one.flac","artist":"First","duration":218},
+                    {"file":"b/two.flac","artist":"Second","duration":102}]})"};
+            }
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *flow = window.coverFlow();
+        QTRY_VERIFY(flow->accessibleDescription().startsWith("Playing song\n"));
+        QToolButton *actions = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Album or song information actions") actions = button;
+        QVERIFY(actions);
+        const auto openDetails = [&] {
+            QTest::mouseClick(actions, Qt::LeftButton);
+            auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QVERIFY(menu);
+            for (auto *action : menu->actions()) {
+                if (action->text() != "More info") continue;
+                menu->hide();
+                action->trigger();
+                return;
+            }
+            QFAIL("Missing More info action");
+        };
+        const auto field = [&](const QString &name) {
+            auto *panel = window.findChild<MediaInfoPanel *>();
+            if (panel) {
+                for (auto *label : panel->findChildren<QLabel *>("detailValue"))
+                    if (label->accessibleName() == name) return label->text();
+            }
+            return QString();
+        };
+        openDetails();
+        QTRY_COMPARE(field("Composer"), QString("Composer"));
+        QCOMPARE(field("Singer"), QString("Singer"));
+        QCOMPARE(field("Nr"), QString("4"));
+        QCOMPARE(field("Codec"), QString("FLAC"));
+        QCOMPARE(field("Bitrate"), QString("920 kbps"));
+        QCOMPARE(field("Path"), QString("a/song.flac"));
+        QTest::keyClick(window.findChild<MediaInfoPanel *>(), Qt::Key_Escape);
+        QTRY_VERIFY(!window.findChild<MediaInfoPanel *>());
+        flow->select(1, false);
+        openDetails();
+        QTRY_COMPARE(field("Songs"), QString("2"));
+        QCOMPARE(field("Artist"), QString("First, Second"));
+        QCOMPARE(field("Duration"), QString("5:20"));
+        QCOMPARE(field("Genre"), QString("Soundtrack"));
     }
     void albumStripBrowsesAcrossPagesWithoutChangingPlayback() {
         HttpFixture server;
@@ -686,6 +750,55 @@ private slots:
         QCOMPARE(reflectedPixel(545), QColor(0, 96, 0));
         QCOMPARE(reflectedPixel(630), reflectedPixel(545));
         QCOMPARE(reflectedPixel(170), reflectedPixel(255));
+    }
+    void glassSamplesArtworkAndPlaybackAddsNoCoverOutline() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &) {
+            return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Cover","artUrl":"/api/art?id=1"}],"total":1})"};
+        };
+        ApiClient api(server.url());
+        LibraryModel library(&api);
+        library.reload();
+        QTRY_COMPARE(library.rowCount(), 1);
+        ArtworkCache cache(&api);
+        QImage cover(16, 16, QImage::Format_ARGB32_Premultiplied);
+        for (int x = 0; x < cover.width(); ++x) {
+            for (int y = 0; y < cover.height(); ++y)
+                cover.setPixelColor(x, y, x < 8 ? Qt::red : Qt::green);
+        }
+        cache.insert(library.album(0)->artUrl, {cover, {}});
+        CoverFlowWidget widget(&library, &cache);
+        widget.resize(800, 400);
+        widget.show();
+        const QRect area = widget.centreCoverRect().adjusted(-3, -3, 3, 3).intersected(widget.rect());
+        const auto before = widget.grab(area).toImage();
+        PlayerState playback;
+        playback.state = "play";
+        playback.track.file = "a/song.flac";
+        playback.track.albumId = "1";
+        widget.setPlayback(playback);
+        QCOMPARE(widget.grab(area).toImage(), before);
+
+        FrostedPanel panel(&widget, QColor(10, 10, 20, 155));
+        panel.setGeometry(350, 30, 100, 90);
+        panel.show();
+        const auto center = [&] {
+            const auto image = panel.grab().toImage();
+            return image.pixelColor(image.width() / 2, image.height() / 2);
+        };
+        // A matte fill would have no saturated red or green. The source has
+        // a hard split, so seeing both colours at the split also tests blur.
+        QTRY_VERIFY(center().red() >= 25 && center().green() >= 25);
+
+        FrostedMenu menu(&widget, &widget);
+        menu.addAction("Menu");
+        menu.popup(widget.mapToGlobal(QPoint(420, 100)));
+        const auto backdrop = [&] {
+            const auto image = menu.grab().toImage();
+            return image.pixelColor(image.width() / 2, qRound(7 * image.devicePixelRatio()));
+        };
+        QTRY_VERIFY(backdrop().green() > backdrop().red() + 30);
+        menu.hide();
     }
 };
 QTEST_MAIN(NativeTests)

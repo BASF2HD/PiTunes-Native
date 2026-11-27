@@ -186,22 +186,22 @@ private:
 
 TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QString &year,
                          const QVector<Track> &tracks, bool albumContext)
-    : QFrame(stage), m_stage(stage), m_heading(albumWithYear(title, year)) {
+    : FrostedPanel(stage, QColor(10, 10, 20, 155)), m_stage(stage), m_heading(albumWithYear(title, year)) {
     setObjectName("trackDrawer");
     setAccessibleName(m_heading);
     setAttribute(Qt::WA_DeleteOnClose);
     setAttribute(Qt::WA_StyledBackground);
     setFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont));
     setStyleSheet(
-        "QFrame#trackDrawer { background: #12141e; border: 1px solid #3d4251; }"
+        "QFrame#trackDrawer { background: transparent; border: 0; }"
         "QLabel { background: transparent; border: 0; color: #aab0c2; font-size: 12px; }"
         "QLabel#drawerTitle { color: #f4f5fa; font-size: 15px; font-weight: 600; }"
         "QLabel#drawerCount { font-size: 13px; }"
         "QPushButton { background: #222430; border: 1px solid #353748; border-radius: 15px; padding: 0; }"
         "QPushButton:hover, QPushButton:focus { background: #34384d; border-color: #828aa7; }"
         "QListView { background: transparent; border: 0; outline: 0; }"
-        "QScrollBar:vertical { background: #171923; width: 8px; margin: 0; }"
-        "QScrollBar::handle:vertical { background: #4b4f64; min-height: 20px; border-radius: 3px; }"
+        "QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }"
+        "QScrollBar::handle:vertical { background: rgba(255,255,255,58); min-height: 20px; border-radius: 3px; }"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(1, 1, 1, 1);
@@ -263,6 +263,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     m_list->setObjectName("trackDrawerList");
     m_list->setAccessibleName("Songs");
     m_list->setUniformItemSizes(true);
+    m_list->viewport()->setAutoFillBackground(false);
     m_list->setMouseTracking(true);
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

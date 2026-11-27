@@ -9,12 +9,15 @@ double numberValue(const QJsonValue &value, double fallback = 0);
 bool boolValue(const QJsonValue &value);
 struct Album {
     QString id, title, artist, year, artUrl;
+    QString genre = {};
     static Album fromJson(const QJsonObject &object);
 };
 struct Track {
     QString file, title, artist, album, albumId, year;
     double duration = 0;
     QString trackNumber;
+    QString albumArtist = {}, singer = {}, composer = {}, genre = {}, codec = {};
+    double bitRate = 0;
     static Track fromJson(const QJsonObject &object);
 };
 struct PlayerState {

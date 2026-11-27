@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FrostedSurface.h"
 #include "models/Domain.h"
 #include <QElapsedTimer>
 #include <QFrame>
@@ -14,7 +15,7 @@ namespace PiTunes {
 class CoverFlowWidget;
 class TrackRowDelegate;
 
-class TrackDrawer : public QFrame {
+class TrackDrawer : public FrostedPanel {
     Q_OBJECT
 public:
     TrackDrawer(CoverFlowWidget *stage, const QString &title, const QString &year,

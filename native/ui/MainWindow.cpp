@@ -3,11 +3,12 @@
 #include "TouchKeyboard.h"
 #include "TrackDrawer.h"
 #include "PlayerIcons.h"
+#include "FrostedSurface.h"
+#include "MediaInfoPanel.h"
 #include <QActionGroup>
 #include <QApplication>
 #include <QCollator>
 #include <QComboBox>
-#include <QMessageBox>
 #include <QStyleOption>
 #include <algorithm>
 #include <QSignalBlocker>
@@ -30,6 +31,15 @@
 
 namespace PiTunes {
 namespace {
+constexpr int transportHeight = 40;
+constexpr int browseHeight = 44;
+constexpr int footerHeight = transportHeight + browseHeight;
+
+QString albumTracksPath(const QString &id) {
+    const auto decoded = QUrl::fromPercentEncoding(id.toUtf8());
+    return "/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decoded)) + "/tracks";
+}
+
 class AlbumStrip : public QSlider {
 public:
     explicit AlbumStrip(QWidget *parent) : QSlider(Qt::Horizontal, parent) {}
@@ -60,6 +70,8 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_library = new LibraryModel(m_api, this);
     reduced = reduced || QSettings().value("native/reducedMotion", false).toBool();
     m_artwork = new ArtworkCache(m_api, reduced ? 6 : 12, this);
+    m_flow = new CoverFlowWidget(m_library, m_artwork, this);
+    m_flow->setReducedMotion(reduced);
     auto *root = new QWidget(this); auto *layout = new QVBoxLayout(root);
     layout->setContentsMargins(20, 12, 20, 10); layout->setSpacing(4); setCentralWidget(root);
     root->setStyleSheet(
@@ -67,15 +79,14 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         "QToolButton:hover, QToolButton:focus { color: white; background: #1a1d25; border: 1px solid #414651; border-radius: 5px; }"
         "QToolButton::menu-indicator { width: 0; }"
         "QToolButton#roundControl { border: 1px solid #383b45; border-radius: 16px; }"
-        "QToolButton#mainPlay { border: 1px solid #686b78; border-radius: 23px;"
+        "QToolButton#trackStep:hover, QToolButton#trackStep:focus { border-radius: 16px;"
+          "border: 1px solid rgba(225,232,245,48); background: rgba(225,232,245,34); }"
+        "QToolButton#mainPlay { border: 1px solid #686b78; border-radius: 19px;"
           "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #373942,stop:1 #20222a); }"
         "QToolButton#mainPlay:hover, QToolButton#mainPlay:focus { border-color: #b5bac8; background: #343846; }"
         "QToolButton#browseTab { border-radius: 0; border: 1px solid transparent; font-size: 10px; font-weight: 600; }"
         "QToolButton#browseTab[activeBrowse=\"true\"] { border-bottom: 2px solid #e0e3ee; }"
-        "QToolButton#browseTab:focus { background: #20232d; }"
-        "QMenu { background: #151722; color: #ecedf5; border: 1px solid #424653; padding: 4px; }"
-        "QMenu::item { padding: 6px 20px 6px 26px; }"
-        "QMenu::item:selected { background: #343c53; }");
+        "QToolButton#browseTab:focus { background: rgba(225,232,245,36); }");
     const auto iconButton = [root](PlayerIcon icon, const QString &label, int side = 32) {
         auto *button = new QToolButton(root);
         button->setFixedSize(side, side);
@@ -115,13 +126,14 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     header->addWidget(searchToggle);
     m_volumeButton = iconButton(PlayerIcon::Volume, "Volume");
     m_volumeButton->setObjectName("roundControl");
-    auto *volumeMenu = new QMenu(m_volumeButton);
+    auto *volumeMenu = new FrostedMenu(m_flow, m_volumeButton);
     auto *volumeAction = new QWidgetAction(volumeMenu);
     m_volume = new QSlider(Qt::Vertical, volumeMenu);
     m_volume->setRange(0, 100);
     m_volume->setFixedSize(36, 112);
     m_volume->setAccessibleName("Volume level");
     m_volume->setStyleSheet(
+        "QSlider { background: transparent; }"
         "QSlider::groove:vertical { width: 4px; background: #393c48; border-radius: 2px; }"
         "QSlider::handle:vertical { height: 14px; margin: 0 -5px; border-radius: 7px; background: #ecedf5; }");
     volumeAction->setDefaultWidget(m_volume);
@@ -137,16 +149,13 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         command("/api/player/options", {{"shuffle", !m_player.shuffle}});
     });
 
-    m_flow = new CoverFlowWidget(m_library, m_artwork, this);
-    m_flow->setReducedMotion(reduced);
     layout->addWidget(m_flow, 1);
 
-    m_searchPanel = new QFrame(m_flow);
+    m_searchPanel = new FrostedPanel(m_flow, QColor(14, 16, 26, 182), 24, 6);
     m_searchPanel->setObjectName("librarySearchPanel");
     m_searchPanel->setAccessibleName("Library search");
     m_searchPanel->setStyleSheet(
-        "QFrame#librarySearchPanel { background: rgba(16, 18, 26, 246);"
-        "border: 1px solid #484d5c; border-radius: 8px; }");
+        "QFrame#librarySearchPanel { background: transparent; border: 0; }");
     auto *searchLayout = new QVBoxLayout(m_searchPanel);
     searchLayout->setContentsMargins(8, 8, 8, 8);
     searchLayout->setSpacing(5);
@@ -176,23 +185,28 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_transportPanel = new QFrame(m_flow);
     m_transportPanel->setObjectName("transportPanel");
     m_transportPanel->setStyleSheet("QFrame#transportPanel { background: transparent; }");
-    auto *transport = new QHBoxLayout(m_transportPanel);
-    transport->setContentsMargins(0, 0, 0, 0);
+    auto *footer = new QVBoxLayout(m_transportPanel);
+    footer->setContentsMargins(0, 0, 0, 0);
+    footer->setSpacing(0);
+    auto *transport = new QHBoxLayout;
     transport->setSpacing(8);
-    m_flow->setTransportInset(46);
-    auto *previous = iconButton(PlayerIcon::Previous, "Previous song", 36);
+    footer->addLayout(transport);
+    m_flow->setTransportInset(footerHeight);
+    auto *previous = iconButton(PlayerIcon::Previous, "Previous song", 32);
+    previous->setObjectName("trackStep");
     connect(previous, &QToolButton::clicked, this, [this] { command("/api/player/previous"); });
     transport->addWidget(previous);
-    m_play = iconButton(PlayerIcon::Play, "Play or pause", 46);
+    m_play = iconButton(PlayerIcon::Play, "Play or pause", 38);
     m_play->setObjectName("mainPlay");
-    m_play->setIconSize(QSize(27, 27));
+    m_play->setIconSize(QSize(24, 24));
     m_play->setProperty("playing", false);
     connect(m_play, &QToolButton::clicked, this, [this] {
         if (m_player.track.file.isEmpty()) showAlbum(m_flow->currentIndex(), true);
         else command(m_player.state == "play" ? "/api/player/pause" : "/api/player/play");
     });
     transport->addWidget(m_play);
-    auto *next = iconButton(PlayerIcon::Next, "Next song", 36);
+    auto *next = iconButton(PlayerIcon::Next, "Next song", 32);
+    next->setObjectName("trackStep");
     connect(next, &QToolButton::clicked, this, [this] { command("/api/player/next"); });
     transport->addWidget(next);
 
@@ -203,15 +217,15 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(255,255,255,44),"
         "stop:0.48 rgba(255,255,255,13),stop:1 rgba(255,255,255,28)); }"
         "QToolButton { border: 0; } QToolButton:hover { background: rgba(230,235,248,60); }");
-    albumRail->setFixedHeight(22);
+    albumRail->setFixedHeight(20);
     auto *rail = new QHBoxLayout(albumRail);
     rail->setContentsMargins(5, 1, 5, 1);
     rail->setSpacing(2);
     auto *coverBack = iconButton(PlayerIcon::Left, "Previous album", 25);
-    coverBack->setFixedHeight(18);
+    coverBack->setFixedHeight(16);
     coverBack->setIconSize(QSize(12, 12));
     auto *coverForward = iconButton(PlayerIcon::Right, "Next album", 25);
-    coverForward->setFixedHeight(18);
+    coverForward->setFixedHeight(16);
     coverForward->setIconSize(QSize(12, 12));
     m_albumStrip = new AlbumStrip(albumRail);
     m_albumStrip->setRange(0, 0);
@@ -219,9 +233,9 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_albumStrip->setAccessibleName("Browse albums");
     m_albumStrip->setStyleSheet(
         "QSlider { background: transparent; }"
-        "QSlider::groove:horizontal { height: 18px; background: transparent; "
+        "QSlider::groove:horizontal { height: 16px; background: transparent; "
         "border-left: 1px solid rgba(210,218,235,52); border-right: 1px solid rgba(210,218,235,52); }"
-        "QSlider::handle:horizontal { width: 30px; margin: 3px 0; border: 1px solid #656b79; border-radius: 6px;"
+        "QSlider::handle:horizontal { width: 30px; margin: 2px 0; border: 1px solid #656b79; border-radius: 5px;"
         "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #444651,stop:0.54 #111216,stop:1 #060609); }");
     rail->addWidget(coverBack);
     rail->addWidget(m_albumStrip, 1);
@@ -230,7 +244,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     connect(m_albumStrip, &QSlider::valueChanged, this, &MainWindow::selectAlbumOnStrip);
     connect(coverBack, &QToolButton::clicked, this, [this] { m_albumStrip->setValue(m_albumStrip->value() - 1); });
     connect(coverForward, &QToolButton::clicked, this, [this] { m_albumStrip->setValue(m_albumStrip->value() + 1); });
-    auto *drawer = iconButton(PlayerIcon::Drawer, "Open songs drawer", 36);
+    auto *drawer = iconButton(PlayerIcon::Drawer, "Open songs drawer", 32);
     connect(drawer, &QToolButton::clicked, this, [this] {
         if (m_trackDrawer) closeTrackDrawer();
         else showAlbum(m_flow->currentIndex());
@@ -239,8 +253,8 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
 
     auto *navigation = new QHBoxLayout;
     navigation->setSpacing(2);
-    layout->addLayout(navigation);
-    buildBrowseMenus(navigation, root, reduced);
+    footer->addLayout(navigation);
+    buildBrowseMenus(navigation, m_transportPanel, reduced);
     m_message = new QLabel(root);
     m_message->setWordWrap(true);
     m_message->setAlignment(Qt::AlignCenter);
@@ -264,6 +278,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     connect(searchToggle, &QToolButton::toggled, this, [=](bool shown) {
         m_searchPanel->setVisible(shown);
         if (shown) {
+            closeMediaInfo();
             m_snapBack.stop();
             m_preSearchFilter = m_library->filter();
             m_preSearchSort = m_library->sortMode();
@@ -364,9 +379,10 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
         button->setText(name.toUpper());
         button->setAccessibleName(name);
         button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setMinimumHeight(44);
+        button->setFixedHeight(browseHeight);
         navigation->addWidget(button, 1);
-        auto *menu = new QMenu(name, button);
+        auto *menu = new FrostedMenu(m_flow, button);
+        menu->setTitle(name);
         menu->setAccessibleName(name + " menu");
         heading(menu, name, true);
         const bool primary = icon == PlayerIcon::Albums || icon == PlayerIcon::Songs ||
@@ -525,7 +541,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void MainWindow::placeOverlays() {
-    m_transportPanel->setGeometry(0, m_flow->height() - 46, m_flow->width(), 46);
+    m_transportPanel->setGeometry(0, m_flow->height() - footerHeight, m_flow->width(), footerHeight);
     const auto caption = m_flow->captionRect();
     m_captionActions->move(caption.right() + 4, caption.top());
     if (m_searchPanel->isVisible()) {
@@ -533,6 +549,13 @@ void MainWindow::placeOverlays() {
         m_searchPanel->adjustSize();
         m_searchPanel->move(m_flow->width() - m_searchPanel->width() - 8, 3);
         m_searchPanel->raise();
+    }
+    if (m_infoPanel) {
+        const auto cover = m_flow->centreCoverRect();
+        const int width = qMin(m_flow->width() - 12, qMax(356, cover.width()));
+        const int height = qMin(m_flow->height() - footerHeight - cover.top() - 6, qMax(180, cover.height()));
+        m_infoPanel->setGeometry((m_flow->width() - width) / 2, cover.top(), width, height);
+        m_infoPanel->raise();
     }
 }
 
@@ -639,7 +662,7 @@ void MainWindow::focusInitialPlaybackAlbum() {
 }
 int MainWindow::returnAlbumRow() const {
     if (m_player.state != "play" || m_player.track.file.isEmpty() || m_flow->animating() ||
-        m_trackDrawer || m_searchPanel->isVisible() || m_albumStrip->isSliderDown() ||
+        m_trackDrawer || m_infoPanel || m_searchPanel->isVisible() || m_albumStrip->isSliderDown() ||
         m_pendingAlbumRow >= 0 || (m_pendingInspection && m_pendingInspection == m_drawerGeneration) ||
         QApplication::activePopupWidget() || QApplication::activeModalWidget()) return -1;
     const int row = playingAlbumRow();
@@ -660,13 +683,19 @@ void MainWindow::showAlbum(int row, bool play) {
     }
     const auto generation = ++m_drawerGeneration;
     if (!play) m_pendingInspection = generation;
-    const auto decodedId = QUrl::fromPercentEncoding(album.id.toUtf8());
-    m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decodedId)) + "/tracks",
+    m_api->get(albumTracksPath(album.id),
         [this, album, play, generation](QJsonObject o, QString error) {
             if (generation != m_drawerGeneration) return;
             m_pendingInspection = 0;
             if (!error.isEmpty()) { setMessage(error); scheduleReturnToPlayback(); return; }
-            QVector<Track> tracks; for (const auto &v : o["tracks"].toArray()) tracks.append(Track::fromJson(v.toObject()));
+            QVector<Track> tracks;
+            for (const auto &v : o["tracks"].toArray()) {
+                auto track = Track::fromJson(v.toObject());
+                track.albumId = album.id;
+                if (track.albumArtist.isEmpty()) track.albumArtist = album.artist;
+                if (track.genre.isEmpty()) track.genre = album.genre;
+                tracks.append(std::move(track));
+            }
             if (play && !tracks.isEmpty()) {
                 QJsonArray queue; for (const auto &track : tracks) queue.append(track.file);
                 command("/api/player/play", {{"file", tracks.first().file}, {"albumId", album.id}, {"queue", queue}, {"continuous", true}});
@@ -675,6 +704,7 @@ void MainWindow::showAlbum(int row, bool play) {
         });
 }
 void MainWindow::closeTrackDrawer() {
+    closeMediaInfo();
     if (!m_trackDrawer) return;
     m_trackDrawer->close();
     m_trackDrawer = nullptr;
@@ -702,7 +732,7 @@ void MainWindow::showTracks(const QString &title, const QVector<Track> &tracks, 
     });
     connect(drawer, &TrackDrawer::trackActionsRequested, this, [this, tracks](int row, const QPoint &position) {
         if (row < 0 || row >= tracks.size()) return;
-        showSubjectActions(position, {}, tracks[row], tracks);
+        showSubjectActions(position, {}, tracks[row], tracks, row);
     });
     connect(drawer, &TrackDrawer::albumFavouriteRequested, this, [this, albumId] {
         toggleFavourite(albumId, true);
@@ -774,25 +804,26 @@ void MainWindow::showCaptionActions() {
     const bool playingHere = m_player.state == "play" && !m_player.track.file.isEmpty() &&
         m_player.track.albumId == album->id;
     const auto anchor = m_captionActions->mapToGlobal(QPoint(m_captionActions->width(), 0));
-    showSubjectActions(anchor, playingHere ? Album{} : *album, playingHere ? m_player.track : Track{});
+    if (!playingHere) { showSubjectActions(anchor, *album, {}); return; }
+    auto track = m_player.track;
+    if (track.albumArtist.isEmpty()) track.albumArtist = album->artist;
+    if (track.genre.isEmpty()) track.genre = album->genre;
+    if (track.year.isEmpty()) track.year = album->year;
+    showSubjectActions(anchor, {}, track);
 }
 
 void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, const Track &track,
-                                    const QVector<Track> &list) {
+                                    const QVector<Track> &list, int row) {
     const bool albumContext = !album.id.isEmpty();
     const auto id = albumContext ? album.id : track.file;
-    const auto title = albumContext ? album.title : track.title;
-    auto *menu = new QMenu(this);
+    auto *menu = new FrostedMenu(m_flow, this);
     menu->setAccessibleName(albumContext ? "Album actions" : "Song actions");
-    menu->setStyleSheet("QMenu { background: #151722; color: #ecedf5; border: 1px solid #424653; padding: 4px; }"
-                        "QMenu::item { padding: 6px 14px; } QMenu::item:selected { background: #343c53; }");
     auto *add = menu->addAction(albumContext ? "Add album to playlist…" : "Add to playlist…", this,
         [this, album, albumContext, track] {
             if (m_demo) return;
             if (!albumContext) { choosePlaylist({track.file}); return; }
             const auto generation = ++m_drawerGeneration;
-            const auto decoded = QUrl::fromPercentEncoding(album.id.toUtf8());
-            m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decoded)) + "/tracks",
+            m_api->get(albumTracksPath(album.id),
                 [this, generation](QJsonObject o, QString error) {
                     if (generation != m_drawerGeneration) return;
                     if (!error.isEmpty()) { setMessage(error); return; }
@@ -812,21 +843,7 @@ void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, co
     connect(this, &MainWindow::favouritesChanged, menu, labelFavourite);
     labelFavourite();
     refreshFavourites();
-    menu->addAction("More info", this, [this, title, album, track, albumContext] {
-        QStringList lines;
-        if (albumContext) lines << albumWithYear(album.title, album.year) << album.artist;
-        else {
-            lines << track.title << track.artist << albumWithYear(track.album, track.year);
-            if (track.duration > 0.) lines << timeLabel(track.duration);
-        }
-        lines.removeAll(QString());
-        auto *details = new QMessageBox(QMessageBox::NoIcon, title, {}, QMessageBox::Close, this);
-        details->setTextFormat(Qt::PlainText);
-        details->setText(lines.join('\n'));
-        details->setAttribute(Qt::WA_DeleteOnClose);
-        connect(details, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
-        details->open();
-    });
+    menu->addAction("More info", this, [this, album, track, row] { showMediaInfo(album, track, row); });
     if (!list.isEmpty()) {
         menu->addSeparator();
         menu->addAction("Save list as playlist…", this, [this, list] { createPlaylist(trackIds(list)); });
@@ -834,6 +851,61 @@ void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, co
     watchBrowsePopup(menu);
     connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
     menu->popup(anchor - QPoint(menu->sizeHint().width(), menu->sizeHint().height()));
+}
+
+void MainWindow::closeMediaInfo() {
+    if (!m_infoPanel) return;
+    m_infoPanel->close();
+    m_infoPanel = nullptr;
+    if (m_trackDrawer) m_trackDrawer->findChild<QListView *>()->setFocus();
+    else m_flow->setFocus();
+    scheduleReturnToPlayback();
+}
+
+void MainWindow::showMediaInfo(const Album &album, const Track &selected, int row) {
+    closeMediaInfo();
+    m_snapBack.stop();
+    const bool isAlbum = !album.id.isEmpty();
+    auto track = selected;
+    if (track.bitRate <= 0. && track.file == m_player.track.file && m_player.state != "stop")
+        track.bitRate = m_player.track.bitRate;
+    auto *panel = new MediaInfoPanel(m_flow, isAlbum ? "Album Details" : "Track Details",
+                                     isAlbum ? albumWithYear(album.title, album.year) : "More Info");
+    m_infoPanel = panel;
+    connect(panel, &MediaInfoPanel::dismissRequested, this, &MainWindow::closeMediaInfo);
+    if (isAlbum) panel->setAlbum(album);
+    else panel->setTrack(track, row);
+    placeOverlays();
+    panel->show();
+    panel->raise();
+    panel->setFocus();
+
+    const auto albumId = isAlbum ? album.id : track.albumId;
+    if (albumId.isEmpty() || m_demo) return;
+    const auto generation = m_drawerGeneration;
+    m_api->get(albumTracksPath(albumId),
+        [this, guard = QPointer<MediaInfoPanel>(panel), generation, isAlbum, album, track, row](QJsonObject o, QString error) {
+            if (!guard || guard != m_infoPanel || generation != m_drawerGeneration || !error.isEmpty()) return;
+            QVector<Track> tracks;
+            for (const auto &v : o["tracks"].toArray()) tracks.append(Track::fromJson(v.toObject()));
+            if (isAlbum) {
+                auto enriched = album;
+                if (enriched.genre.isEmpty() && !tracks.isEmpty()) enriched.genre = tracks.front().genre;
+                guard->setAlbum(enriched, &tracks);
+                return;
+            }
+            for (auto &detail : tracks) {
+                if (detail.file != track.file) continue;
+                for (auto field : {&Track::title, &Track::artist, &Track::albumArtist, &Track::singer, &Track::composer,
+                                   &Track::album, &Track::genre, &Track::year, &Track::codec, &Track::trackNumber}) {
+                    if ((detail.*field).isEmpty()) detail.*field = track.*field;
+                }
+                if (detail.duration <= 0.) detail.duration = track.duration;
+                if (detail.bitRate <= 0.) detail.bitRate = track.bitRate;
+                guard->setTrack(detail, row);
+                break;
+            }
+        });
 }
 
 void MainWindow::choosePlaylist(const QJsonArray &ids) {

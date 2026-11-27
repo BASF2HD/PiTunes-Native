@@ -15,6 +15,7 @@ class QJsonArray;
 class QMenu;
 namespace PiTunes {
 class TrackDrawer;
+class MediaInfoPanel;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -50,7 +51,9 @@ private:
     void toggleFavourite(const QString &id, bool album);
     void showCaptionActions();
     void showSubjectActions(const QPoint &anchor, const Album &album, const Track &track,
-                            const QVector<Track> &list = {});
+                            const QVector<Track> &list = {}, int row = -1);
+    void showMediaInfo(const Album &album, const Track &track, int row);
+    void closeMediaInfo();
     void choosePlaylist(const QJsonArray &ids);
     void createPlaylist(const QJsonArray &ids);
     void appendToPlaylist(const QString &id, const QJsonArray &tracks, int row);
@@ -59,6 +62,7 @@ private:
     ArtworkCache *m_artwork;
     CoverFlowWidget *m_flow;
     QPointer<TrackDrawer> m_trackDrawer;
+    QPointer<MediaInfoPanel> m_infoPanel;
     QString m_drawerAlbumId;
     QLabel *m_message, *m_time;
     QToolButton *m_play, *m_repeat, *m_shuffle, *m_volumeButton;

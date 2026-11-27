@@ -147,7 +147,7 @@ QIcon playerIcon(PlayerIcon icon, bool active) {
     const int key = 2 * int(icon) + (active ? 1 : 0);
     if (const auto found = icons.constFind(key); found != icons.cend()) return *found;
     QIcon result;
-    const QColor color = icon == PlayerIcon::FavouriteFilled ? QColor("#ff819d") : QColor("#f2f4fb");
+    const QColor color = icon == PlayerIcon::FavouriteFilled ? QColor(Qt::white) : QColor("#f2f4fb");
     result.addPixmap(renderIcon(icon, active ? color : QColor("#999daa")));
     result.addPixmap(renderIcon(icon, QColor("#565962")), QIcon::Disabled);
     icons.insert(key, result);

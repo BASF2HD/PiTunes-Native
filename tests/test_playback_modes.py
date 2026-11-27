@@ -76,7 +76,8 @@ class PlaybackModesTest(unittest.TestCase):
 
     def test_status_exposes_native_modes_to_all_clients(self):
         mpd = FakeMPD()
-        mpd.status = {"repeat": "1", "single": "1", "random": "1", "state": "play"}
+        mpd.status = {"repeat": "1", "single": "1", "random": "1", "state": "play", "bitrate": "920", "songid": "12"}
+        mpd.single_map = lambda command: mpd.status if command == "status" else {"file": "album/song.flac", "Id": "12"}
         context = {"mpd": mpd, "as_track": lambda song: {"file": song["file"]},
                    "get_external_input_state": None, "sync_local_playback_takeover": None,
                    "_is_radio_stream_uri": lambda uri: False, "_with_ui_context": lambda payload: payload}
@@ -85,6 +86,9 @@ class PlaybackModesTest(unittest.TestCase):
         self.assertTrue(status["repeat"])
         self.assertTrue(status["single"])
         self.assertTrue(status["random"])
+        self.assertEqual(status["bitrate"], 920)
+        mpd.status["songid"] = "13"
+        self.assertEqual(context["compat_player_state"]()["status"]["bitrate"], 0)
 
     def queue_fixture(self):
         mpd = FakeMPD()

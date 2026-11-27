@@ -69,7 +69,11 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     connect(model, &QAbstractItemModel::rowsInserted, this, [this] { updateCaption(); prefetch(); update(); });
     connect(model, &LibraryModel::pageLoaded, this, QOverload<>::of(&CoverFlowWidget::update));
     connect(model, &LibraryModel::error, this, [this](const QString &) { update(); });
-    connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { if (!m_timer.isActive()) update(); });
+    connect(artwork, &ArtworkCache::ready, this, [this](const QString &) {
+        if (m_timer.isActive()) return;
+        update();
+        emit artworkBackdropChanged();
+    });
 }
 int CoverFlowWidget::visibleCoverCount() const {
     const auto [first, last] = visibleRows(m_motion.position);
@@ -145,6 +149,7 @@ void CoverFlowWidget::settle() {
     m_motion = {m_goal, 0.};
     updateCaption();
     prefetch();
+    emit artworkBackdropChanged();
 }
 void CoverFlowWidget::setReducedMotion(bool reduced) {
     m_reduced = reduced;
@@ -243,13 +248,13 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
             m_motionSurface.fill(Qt::black);
             {
                 QPainter covers(&m_motionSurface);
-                paintCovers(covers, size, top);
+                paintCovers(covers, size, top, &m_hits);
             }
             painter.drawImage(QPoint(), m_motionSurface);
-        } else paintCovers(painter, size, top);
+        } else paintCovers(painter, size, top, &m_hits);
     } else {
         m_motionSurface = QImage();
-        paintCovers(painter, size, top);
+        paintCovers(painter, size, top, &m_hits);
     }
     const auto &caption = m_caption;
     const auto textArea = captionRect();
@@ -273,10 +278,18 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         lineTop += lineHeight;
     }
 }
-void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top) {
+void CoverFlowWidget::paintArtworkBackdrop(QPainter &painter) const {
+    if (m_model->rowCount() == 0) return;
+    painter.save();
+    painter.setClipRect(rect(), Qt::IntersectClip);
+    paintCovers(painter, coverSize(), height() * .035);
+    painter.restore();
+}
+void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
+                                  QVector<QPair<int, QPolygonF>> *hits) const {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    m_hits.clear();
+    if (hits) hits->clear();
     const auto [first, last] = visibleRows(m_motion.position);
     QVector<int> rows;
     for (int i = first; i <= last; ++i) rows.append(i);
@@ -314,15 +327,12 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top) {
             drawProjected(painter, card.art->cover, poly);
         } else {
             painter.setBrush(QColor::fromHsv((card.row * 37 + 210) % 360, 65, 42));
-            painter.setPen(QColor("#55555d")); painter.drawPolygon(poly);
+            painter.setPen(Qt::NoPen);
+            painter.drawPolygon(poly);
             painter.setPen(QColor("#d8d8df"));
             painter.drawText(poly.boundingRect().adjusted(8, 8, -8, -8), Qt::AlignCenter | Qt::TextWordWrap, album.title);
         }
-        painter.setBrush(Qt::NoBrush);
-        const double focus = 1. - qMin(1., std::abs(card.row - m_motion.position));
-        painter.setPen(QPen(album.id == m_playingId ? Qt::white : QColor("#62626b"), .6 + .9 * focus * focus));
-        painter.drawPolygon(poly);
-        m_hits.append({card.row, poly});
+        if (hits) hits->append({card.row, poly});
     }
 }
 void CoverFlowWidget::keyPressEvent(QKeyEvent *e) {

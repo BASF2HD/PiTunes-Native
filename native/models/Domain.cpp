@@ -24,14 +24,17 @@ static QString first(const QJsonObject &o, std::initializer_list<const char *> k
 }
 Album Album::fromJson(const QJsonObject &o) {
     return {first(o, {"id", "albumId"}), first(o, {"title", "album"}),
-        first(o, {"albumArtist", "artist"}), textValue(o["year"]), first(o, {"artUrl", "art_url"})};
+        first(o, {"albumArtist", "artist"}), textValue(o["year"]), first(o, {"artUrl", "art_url"}), textValue(o["genre"])};
 }
 Track Track::fromJson(const QJsonObject &o) {
     return {first(o, {"file", "id"}), first(o, {"title", "Title", "Name"}),
         first(o, {"trackArtist", "artist", "Artist", "singer"}), first(o, {"album", "Album"}),
         first(o, {"albumId", "album_id"}), first(o, {"year", "Date"}),
         numberValue(o.contains("duration") ? o["duration"] : o["Time"]),
-        first(o, {"trackNumber", "track", "Track"})};
+        first(o, {"trackNumber", "track", "Track"}), first(o, {"albumArtist", "AlbumArtist", "albumartist"}),
+        first(o, {"singer", "Singer", "performer", "Performer"}), first(o, {"composer", "Composer"}),
+        first(o, {"genre", "Genre"}), first(o, {"codec", "suffix"}),
+        numberValue(o.contains("bitRate") ? o["bitRate"] : o["bitrate"])};
 }
 PlayerState PlayerState::fromJson(const QJsonObject &o) {
     PlayerState p;
@@ -39,6 +42,7 @@ PlayerState PlayerState::fromJson(const QJsonObject &o) {
     p.source = textValue(o["inputSource"]);
     p.state = textValue(s["state"]);
     p.track = Track::fromJson(o["song"].isObject() ? o["song"].toObject() : s["song"].toObject());
+    if (p.track.bitRate <= 0.) p.track.bitRate = numberValue(s["bitrate"]);
     p.elapsed = qMax(0., numberValue(s["elapsed"]));
     p.duration = qMax(0., numberValue(s["duration"], p.track.duration));
     p.volume = qBound(-1, int(numberValue(s["volume"], -1)), 100);

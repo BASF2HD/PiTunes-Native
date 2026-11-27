@@ -217,6 +217,9 @@ def as_track(entry):
         "artist": artist,
         "trackArtist": track_artist,
         "singer": singer,
+        "albumArtist": first_value(entry.get("AlbumArtist")) or "",
+        "composer": first_value(entry.get("Composer")) or "",
+        "genre": first_value(entry.get("Genre")) or "",
         "year": year,
         "album": album,
         "track": track,
@@ -245,11 +248,17 @@ def api_status():
         playlist_length = int(status.get("playlistlength", "0"))
     if status.get("song", "0").lstrip("-").isdigit():
         playlist_position = int(status.get("song", "0"))
+    bitrate = str(status.get("bitrate") or "")
+    # MPD can advance between status and currentsong. Only pair bitrate
+    # with metadata when both responses identify the same queue entry.
+    if not bitrate.isdigit() or not song.get("Id") or song["Id"] != status.get("songid"):
+        bitrate = "0"
     return {
         "state": status.get("state", "stop"),
         "volume": int(status.get("volume", "0")) if status.get("volume", "0").lstrip("-").isdigit() else 0,
         "elapsed": elapsed,
         "duration": duration,
+        "bitrate": int(bitrate),
         "song": as_track(song) if song else None,
         "playlistlength": playlist_length,
         "playlistposition": playlist_position,
@@ -722,6 +731,7 @@ def compat_player_state():
             "volume": status.get("volume", 0),
             "elapsed": status.get("elapsed", 0),
             "duration": status.get("duration", 0),
+            "bitrate": status.get("bitrate", 0),
             "playlistlength": status.get("playlistlength", 0),
             "playlistposition": status.get("playlistposition", 0),
             "repeat": status.get("repeat", False),
@@ -734,6 +744,11 @@ def compat_player_state():
             "Album": song.get("album", ""),
             "file": song.get("file", ""),
             "Time": song.get("duration", 0),
+            "Track": song.get("track", ""),
+            "AlbumArtist": song.get("albumArtist", ""),
+            "Singer": song.get("singer", ""),
+            "Composer": song.get("composer", ""),
+            "Genre": song.get("genre", ""),
             "albumId": song.get("albumId") or song.get("album_id") or "",
             "year": song.get("year") or "",
         },

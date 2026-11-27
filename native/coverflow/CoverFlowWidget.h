@@ -25,11 +25,13 @@ public:
     QRect captionRect() const;
     int captionAlbumIndex() const { return m_captionRow; }
     void setTransportInset(int pixels);
+    void paintArtworkBackdrop(QPainter &painter) const;
     void setPlayback(const PlayerState &state);
     void setCaptionClearance(int lowerEdge);
 signals:
     void selectionChanged(int index);
     void navigationSettled();
+    void artworkBackdropChanged();
     void activated(int index);
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -46,7 +48,8 @@ private:
     void settle();
     void moveTo(double position, bool animate, double response);
     void updateCaption();
-    void paintCovers(QPainter &painter, double size, double top);
+    void paintCovers(QPainter &painter, double size, double top,
+                     QVector<QPair<int, QPolygonF>> *hits = nullptr) const;
     double coverSize() const;
     QPair<int, int> visibleRows(double position) const;
     LibraryModel *m_model;

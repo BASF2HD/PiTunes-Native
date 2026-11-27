@@ -139,6 +139,23 @@ through playback polls, the search geometry, six dropdowns, context actions,
 and the optimistic heart state with API error recovery.
 All 31 native cases passed in Debug and Release using Qt 5.15.19 on macOS.
 
+The shorter transport and its footer tabs now sit over the cover reflections.
+Covers keep their source edges, the track step buttons use round hover rings,
+and the selected favourite heart fills white. The drawer, browse and action
+menus, volume, search and metadata panels use blurred artwork sampled in Qt
+at a bounded size. The drawer has square corners with the reference's faint
+edge. Verified the artwork remains visible through player chrome using local
+album covers at 800×480 and 1280×680.
+
+More info follows the NaviGlassPlayer track and album layouts. The existing
+album tracks API supplies per-track tags and album totals. Current playback
+adds MPD bitrate only when status and track metadata share the same queue ID.
+Fields without source metadata display Unknown. The running preview backend
+can supply the new bitrate field on its next start.
+All 33 native cases passed in Debug and Release with Qt 5.15.19. All 32 Python
+cases and 24 JavaScript cases passed, including MPD bitrate pairing and the
+existing playback modes.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;
