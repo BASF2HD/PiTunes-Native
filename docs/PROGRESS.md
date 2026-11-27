@@ -95,6 +95,30 @@ spacing. Reflection overlap remains masked. The caption and drawer format
 the date as `Album | Year`. Debug and Release passed 24 native cases, including
 reflection masking, first-neighbour geometry and velocity continuity.
 
+Measured the fast-scroll reference at 60 fps, or 16.7 ms between frames. In the
+55–57 s segment of the supplied 11.34.11 clip, multiple albums cross the centre
+quickly. The final blue cover enters at about 56.13 s. Its main turn slows past
+56.4 s, and it continues drifting sideways as its front flattens from 56.53 s to
+56.73 s before the next gesture. Native CoverFlow now tracks fractional deltas
+and momentum on a frame timer that incoming packets cannot postpone. The centre
+cover stays compact at speed and carries velocity into a slower final settle.
+In an offscreen 1280×680 Mac playback of synthetic trackpad packets at 2× scale,
+the median time to paint and grab a frame decreased from 21.1 ms to 8.7 ms after
+using a logical-resolution projection during motion. This measurement includes
+the capture operation. Trackpad feel and appliance frame rate remain to be
+verified on physical inputs.
+
+The caption now follows the centred album while the user browses, returning to
+three song metadata lines when they reach the playing album. The native chrome
+adopts the NaviGlassPlayer control layout with repeat/shuffle at the top,
+round play/pause, separate album navigation, a drawer button and icon menus.
+The drawer uses system type and the reference's three-bar pulse for a visible
+playing row. It stops pulsing when paused or when reduced motion is enabled.
+All 26 native cases passed in Debug and Release with Qt 5.15.19 on macOS.
+The regressions cover fast input continuing to paint, the album strip fetching
+a later page without a playback mutation, caption context and the playing,
+paused and reduced-motion markers.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

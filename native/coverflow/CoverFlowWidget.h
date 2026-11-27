@@ -14,8 +14,10 @@ class CoverFlowWidget : public QWidget {
 public:
     CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWidget *parent = nullptr);
     int currentIndex() const { return m_target; }
+    double visualPosition() const { return m_motion.position; }
     void select(int index, bool animate = true);
     void setReducedMotion(bool reduced);
+    bool reducedMotion() const { return m_reduced; }
     bool animating() const { return m_timer.isActive(); }
     int visibleCoverCount() const;
     quint64 paintCount() const { return m_paints; }
@@ -38,20 +40,30 @@ private:
     void prefetch();
     void sampleMotion();
     void settle();
+    void moveTo(double position, bool animate, double response);
+    void updateCaption();
+    void paintCovers(QPainter &painter, double size, double top);
     double coverSize() const;
     QPair<int, int> visibleRows(double position) const;
     LibraryModel *m_model;
     ArtworkCache *m_artwork;
     QTimer m_timer;
+    QTimer m_trackpadIdle;
     QElapsedTimer m_clock;
     CoverMotion m_motion, m_start;
+    double m_goal = 0., m_response = 15.;
     double m_wheelRemainder = 0;
+    bool m_trackpadActive = false;
     int m_target = 0;
+    int m_captionRow = -1;
     bool m_reduced = false, m_dragging = false;
     QPointF m_press;
     QVector<QPair<int, QPolygonF>> m_hits;
+    QImage m_motionSurface;
     QString m_playingId;
     QStringList m_playingCaption;
+    QStringList m_caption;
+    bool m_captionShowsPlayback = false;
     int m_captionClearance = 0;
     quint64 m_paints = 0;
 };

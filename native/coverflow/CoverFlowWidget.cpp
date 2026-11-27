@@ -4,6 +4,7 @@
 #include <QPainter>
 #include <QTouchEvent>
 #include <QWheelEvent>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 
@@ -34,19 +35,31 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
 #endif
     connect(&m_timer, &QTimer::timeout, this, [this] {
         sampleMotion();
-        if (std::abs(m_motion.position - m_target) < .0015 && std::abs(m_motion.velocity) < .023) settle();
+        if (qRound(m_motion.position) != m_captionRow) {
+            updateCaption();
+            prefetch();
+        }
+        if (std::abs(m_motion.position - m_goal) < .0015 && std::abs(m_motion.velocity) < .023) settle();
         update();
     });
+    m_trackpadIdle.setSingleShot(true);
+    connect(&m_trackpadIdle, &QTimer::timeout, this, [this] {
+        m_trackpadActive = false;
+        moveTo(qRound(m_goal), true, 10.);
+    });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
+        m_trackpadIdle.stop();
+        m_trackpadActive = false;
         m_target = 0;
+        m_goal = 0.;
         m_wheelRemainder = 0;
         settle();
         update();
     });
-    connect(model, &QAbstractItemModel::rowsInserted, this, [this] { prefetch(); update(); });
+    connect(model, &QAbstractItemModel::rowsInserted, this, [this] { updateCaption(); prefetch(); update(); });
     connect(model, &LibraryModel::pageLoaded, this, QOverload<>::of(&CoverFlowWidget::update));
     connect(model, &LibraryModel::error, this, [this](const QString &) { update(); });
-    connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { update(); });
+    connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { if (!m_timer.isActive()) update(); });
 }
 int CoverFlowWidget::visibleCoverCount() const {
     const auto [first, last] = visibleRows(m_motion.position);
@@ -63,28 +76,42 @@ QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     // Cull once a cover's inner edge leaves the viewport. Fractional positions
     // let edge covers slide out naturally during navigation.
     const double halfViewport = width() / (2. * coverSize());
-    const double screenReach = coverReach(halfViewport);
+    const double screenReach = coverReach(halfViewport + .11 * carouselAmount(m_motion.velocity));
     const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
     const double reach = qMin(screenReach, double(cacheReach));
     return {qMax(0, int(std::ceil(position - reach))),
             qMin(m_model->rowCount() - 1, int(std::floor(position + reach)))};
 }
 void CoverFlowWidget::select(int index, bool animate) {
-    index = qBound(0, index, qMax(0, m_model->rowCount() - 1));
-    if (m_target == index) return;
+    m_trackpadIdle.stop();
+    m_trackpadActive = false;
+    moveTo(index, animate, 15.);
+}
+void CoverFlowWidget::moveTo(double position, bool animate, double response) {
+    position = qBound(0., position, double(qMax(0, m_model->rowCount() - 1)));
+    const bool moving = animate && !m_reduced && isVisible();
+    const int index = qRound(position);
+    if (!moving) position = index;
+    if (position == m_goal && (m_response == response || !m_timer.isActive()) && (moving || !m_timer.isActive())) return;
     if (m_timer.isActive()) sampleMotion();
+    const bool selectionChangedNow = m_target != index;
     m_target = index;
-    if (animate && !m_reduced && isVisible()) {
+    m_goal = position;
+    m_response = response;
+    if (moving) {
         m_start = m_motion;
         m_clock.restart();
-        m_timer.start();
-        prefetch();
-    } else settle();
-    update();
-    emit selectionChanged(index);
+        // Input often arrives faster than the frame interval. Leave an active
+        // timer alone so another packet cannot postpone the next paint.
+        if (!m_timer.isActive()) m_timer.start();
+    } else {
+        settle();
+        update();
+    }
+    if (selectionChangedNow) emit selectionChanged(index);
 }
 void CoverFlowWidget::sampleMotion() {
-    m_motion = advanceCoverMotion(m_start, m_target, m_clock.nsecsElapsed() / 1.e9);
+    m_motion = advanceCoverMotion(m_start, m_goal, m_clock.nsecsElapsed() / 1.e9, m_response);
     const double last = qMax(0, m_model->rowCount() - 1);
     if (m_motion.position < 0. || m_motion.position > last) {
         m_motion = {qBound(0., m_motion.position, last), 0.};
@@ -94,12 +121,16 @@ void CoverFlowWidget::sampleMotion() {
 }
 void CoverFlowWidget::settle() {
     m_timer.stop();
-    m_motion = {double(m_target), 0.};
+    m_motion = {m_goal, 0.};
+    updateCaption();
     prefetch();
 }
 void CoverFlowWidget::setReducedMotion(bool reduced) {
     m_reduced = reduced;
-    if (reduced && m_timer.isActive()) {
+    if (reduced && (m_timer.isActive() || m_trackpadActive)) {
+        m_trackpadIdle.stop();
+        m_trackpadActive = false;
+        m_goal = m_target;
         settle();
         update();
     }
@@ -117,8 +148,30 @@ void CoverFlowWidget::setPlayback(const PlayerState &state) {
     if (caption == m_playingCaption && albumId == m_playingId) return;
     m_playingCaption = caption;
     m_playingId = albumId;
-    setAccessibleDescription(caption.join('\n'));
+    updateCaption();
     update();
+}
+void CoverFlowWidget::updateCaption() {
+    m_captionRow = qRound(m_motion.position);
+    const auto *album = m_model->album(m_captionRow);
+    m_captionShowsPlayback = !m_playingCaption.isEmpty() && (!album || (!m_playingId.isEmpty() && album->id == m_playingId));
+    QStringList caption;
+    if (m_captionShowsPlayback) caption = m_playingCaption;
+    else if (album) {
+        auto title = albumWithYear(album->title, album->year);
+        QString subtitle = album->artist;
+        const int separator = title.lastIndexOf(" | ");
+        if (separator >= 0 && title.mid(separator + 3).toInt() > 0) {
+            if (!subtitle.isEmpty()) subtitle += " | ";
+            subtitle += title.mid(separator + 3);
+            title.truncate(separator);
+        }
+        caption << title;
+        if (!subtitle.isEmpty()) caption << subtitle;
+    }
+    if (caption == m_caption) return;
+    m_caption = caption;
+    setAccessibleDescription(caption.join('\n'));
 }
 void CoverFlowWidget::setCaptionClearance(int lowerEdge) {
     if (lowerEdge == m_captionClearance) return;
@@ -127,12 +180,13 @@ void CoverFlowWidget::setCaptionClearance(int lowerEdge) {
 }
 void CoverFlowWidget::prefetch() {
     QStringList keys;
-    const auto [first, last] = visibleRows(m_target);
-    const int reach = qMax(m_target - first, last - m_target);
+    const int center = qRound(m_motion.position);
+    const auto [first, last] = visibleRows(center);
+    const int reach = qMax(center - first, last - center);
     for (int step = 0; step <= reach; ++step) {
         for (int sign : {1, -1}) {
             if (step == 0 && sign == -1) continue;
-            const auto *album = m_model->album(m_target + step * sign);
+            const auto *album = m_model->album(center + step * sign);
             if (album && !album->artUrl.isEmpty()) keys.append(album->artUrl);
         }
     }
@@ -148,12 +202,60 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
     painter.fillRect(rect(), Qt::black);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    m_hits.clear();
     if (m_model->rowCount() == 0) {
+        m_hits.clear();
         painter.setPen(QColor("#a8a8b4"));
         painter.drawText(rect(), Qt::AlignCenter, m_model->loading() ? "Loading library…" : "No albums · choose a source in Settings");
         return;
     }
+    const double size = coverSize();
+    const double top = height() * .035;
+    // The artwork cache already holds thumbnails. On HiDPI displays, do the
+    // expensive projective passes at logical resolution during movement. Draw
+    // the caption and the final resting frame at the display pixel ratio.
+    const int sceneHeight = qMin(height(), qCeil(top + size * 1.55) + 2);
+    if (m_timer.isActive() && devicePixelRatioF() > 1. && qint64(width()) * sceneHeight <= 2000000) {
+        const QSize surfaceSize(width(), sceneHeight);
+        if (m_motionSurface.size() != surfaceSize) m_motionSurface = QImage(surfaceSize, QImage::Format_RGB32);
+        if (!m_motionSurface.isNull()) {
+            m_motionSurface.fill(Qt::black);
+            {
+                QPainter covers(&m_motionSurface);
+                paintCovers(covers, size, top);
+            }
+            painter.drawImage(QPoint(), m_motionSurface);
+        } else paintCovers(painter, size, top);
+    } else {
+        m_motionSurface = QImage();
+        paintCovers(painter, size, top);
+    }
+    const auto &caption = m_caption;
+    const int textWidth = qMin(width() - 16, qMax(int(size * 1.65), 288));
+    const int y = qMax(qRound(top + size), m_captionClearance) + 8;
+    const int textLeft = (width() - textWidth) / 2;
+    const int available = height() - y;
+    QFont font = painter.font();
+    int lineTop = y;
+    for (int i = 0; i < caption.size(); ++i) {
+        const int ideal = i == 0 ? qBound(16, width() / 48, 24) : qBound(13, width() / 68, 18);
+        font.setPixelSize(qMin(ideal, qMax(11, (available - 9) / qMax(1, caption.size()))));
+        font.setWeight(i == 0 ? QFont::DemiBold : QFont::Normal);
+        painter.setFont(font);
+        const auto metrics = painter.fontMetrics();
+        const int lineHeight = metrics.height() + 1;
+        const QRect line(textLeft, lineTop, textWidth, lineHeight);
+        const auto text = metrics.elidedText(caption[i], i == 0 && m_captionShowsPlayback ? Qt::ElideRight : Qt::ElideMiddle, textWidth);
+        painter.setPen(Qt::black);
+        painter.drawText(line.translated(0, 1), Qt::AlignCenter, text);
+        painter.setPen(i == 0 ? Qt::white : QColor("#c2c2cf"));
+        painter.drawText(line, Qt::AlignCenter, text);
+        lineTop += lineHeight;
+    }
+}
+void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top) {
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    m_hits.clear();
     const auto [first, last] = visibleRows(m_motion.position);
     QVector<int> rows;
     for (int i = first; i <= last; ++i) rows.append(i);
@@ -163,8 +265,6 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         if (da == db) return b == m_target && a != m_target;
         return da > db;
     });
-    const double size = coverSize();
-    const double top = height() * .035;
     const QPointF origin(width() / 2., top);
     struct Card {
         int row;
@@ -173,8 +273,9 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
     };
     QVector<Card> cards;
     cards.reserve(rows.size());
+    const double rush = carouselAmount(m_motion.velocity);
     for (int row : rows) {
-        cards.append({row, projectCover(row - m_motion.position, size, origin),
+        cards.append({row, projectCover(row - m_motion.position, size, origin, rush),
                       m_artwork->find(m_model->album(row)->artUrl)});
     }
 
@@ -203,34 +304,6 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         painter.drawPolygon(poly);
         m_hits.append({card.row, poly});
     }
-    auto caption = m_playingCaption;
-    if (caption.isEmpty()) {
-        if (const auto *selected = m_model->album(qRound(m_motion.position))) {
-            caption << albumWithYear(selected->title, selected->year);
-            if (!selected->artist.isEmpty()) caption << selected->artist;
-        }
-    }
-    const int textWidth = qMin(width() - 16, qMax(int(size * 1.65), 288));
-    const int y = qMax(qRound(top + size), m_captionClearance) + 8;
-    const int textLeft = (width() - textWidth) / 2;
-    const int available = height() - y;
-    QFont font = painter.font();
-    int lineTop = y;
-    for (int i = 0; i < caption.size(); ++i) {
-        const int ideal = i == 0 ? qBound(16, width() / 48, 24) : qBound(13, width() / 68, 18);
-        font.setPixelSize(qMin(ideal, qMax(11, (available - 9) / qMax(1, caption.size()))));
-        font.setWeight(i == 0 ? QFont::DemiBold : QFont::Normal);
-        painter.setFont(font);
-        const auto metrics = painter.fontMetrics();
-        const int lineHeight = metrics.height() + 1;
-        const QRect line(textLeft, lineTop, textWidth, lineHeight);
-        const auto text = metrics.elidedText(caption[i], i == 0 && !m_playingCaption.isEmpty() ? Qt::ElideRight : Qt::ElideMiddle, textWidth);
-        painter.setPen(Qt::black);
-        painter.drawText(line.translated(0, 1), Qt::AlignCenter, text);
-        painter.setPen(i == 0 ? Qt::white : QColor("#c2c2cf"));
-        painter.drawText(line, Qt::AlignCenter, text);
-        lineTop += lineHeight;
-    }
 }
 void CoverFlowWidget::keyPressEvent(QKeyEvent *e) {
     if (e->key() == Qt::Key_Left) select(m_target - 1);
@@ -245,6 +318,18 @@ void CoverFlowWidget::wheelEvent(QWheelEvent *e) {
     const bool pixelScroll = !e->pixelDelta().isNull();
     const auto delta = pixelScroll ? e->pixelDelta() : e->angleDelta();
     const int dominant = std::abs(delta.y()) >= std::abs(delta.x()) ? delta.y() : delta.x();
+    if (pixelScroll && !m_reduced && isVisible()) {
+        m_trackpadActive = true;
+        moveTo(m_goal - dominant / 52., true, 24.);
+        m_trackpadIdle.start(85);
+        e->accept();
+        return;
+    }
+    if (m_trackpadActive && delta.isNull()) {
+        if (e->phase() == Qt::ScrollEnd) m_trackpadIdle.start(28);
+        e->accept();
+        return;
+    }
     m_wheelRemainder -= dominant / (pixelScroll ? 52. : 120.);
     const int steps = int(m_wheelRemainder);
     m_wheelRemainder -= steps;

@@ -34,13 +34,16 @@ double railOffset(double distance) {
 }
 }
 
-CoverQuads projectCover(double distance, double pixels, const QPointF &origin) {
+CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double rush) {
     const double sign = distance < 0 ? -1. : 1.;
     const double offset = std::abs(distance);
     const double t = std::min(1., offset);
     const double turn = t * t * (3. - 2. * t);
     const double yaw = sign * sideYaw * turn;
-    const double centre = sign * railOffset(offset);
+    const double centre = sign * (railOffset(offset) - .11 * rush * turn);
+    // During a fast pass the front cover remains compact. It opens to its
+    // resting size as the rail slows instead of pulsing at every album index.
+    const double faceScale = 1. - .28 * rush * (1. - turn);
     // The turning edge comes forward slightly before settling onto the side.
     const double depth = sideDepth * turn - .075 * 4. * turn * (1. - turn);
     const double sine = std::sin(yaw);
@@ -50,21 +53,26 @@ CoverQuads projectCover(double distance, double pixels, const QPointF &origin) {
         return origin + pixels * QPointF(centre + x * cosine * scale, horizon + (y - horizon) * scale);
     };
     const auto quad = [&](double top, double bottom) {
-        return QPolygonF({point(-.5, top), point(.5, top), point(.5, bottom), point(-.5, bottom)});
+        const double edge = .5 * faceScale;
+        return QPolygonF({point(-edge, top), point(edge, top), point(edge, bottom), point(-edge, bottom)});
     };
     // The cached image contains the lower half of the cover, already mirrored
     // and faded. Project that half-plane directly below the cover's floor edge.
-    return {quad(0., 1.), quad(1. + reflectionGap, 1.5 + reflectionGap)};
+    return {quad(1. - faceScale, 1.), quad(1. + reflectionGap, 1. + .5 * faceScale + reflectionGap)};
 }
 
 double coverReach(double halfViewport) {
     return 1. + (halfViewport - sideInnerEdge) / sideStep;
 }
 
-CoverMotion advanceCoverMotion(CoverMotion start, double target, double seconds) {
+double carouselAmount(double velocity) {
+    const double t = std::clamp((std::abs(velocity) - 6.) / 14., 0., 1.);
+    return t * t * (3. - 2. * t);
+}
+
+CoverMotion advanceCoverMotion(CoverMotion start, double target, double seconds, double response) {
     // Critical damping gives a still cover a soft launch. A new target can
     // inherit both the current position and velocity without a visible kick.
-    constexpr double response = 15.;
     const double displacement = start.position - target;
     const double slope = start.velocity + response * displacement;
     const double decay = std::exp(-response * seconds);

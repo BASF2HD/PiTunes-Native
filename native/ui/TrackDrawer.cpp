@@ -1,6 +1,8 @@
 #include "TrackDrawer.h"
+#include "PlayerIcons.h"
 #include "coverflow/CoverFlowWidget.h"
 #include <QApplication>
+#include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -9,11 +11,13 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QScroller>
 #include <QShortcut>
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
+#include <cmath>
 #include <functional>
 
 namespace PiTunes {
@@ -95,35 +99,44 @@ public:
         return true;
     }
 
+    const QString &currentFile() const { return m_currentFile; }
+    void setPulseTime(qint64 elapsed) { m_elapsed = elapsed; }
+
     QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const override { return {0, rowHeight}; }
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
         const QRect row = option.rect;
         const bool current = !m_currentFile.isEmpty() && index.data(FileRole).toString() == m_currentFile;
         painter->save();
-        if (option.state & QStyle::State_Selected) painter->fillRect(row, QColor("#30354c"));
-        else if (current) painter->fillRect(row, QColor("#242a3c"));
-        else if (option.state & QStyle::State_MouseOver) painter->fillRect(row, QColor("#212330"));
-        painter->setPen(QColor("#303241"));
+        if (current) {
+            QLinearGradient glow(row.topLeft(), row.topRight());
+            glow.setColorAt(0, QColor(127, 218, 255, 50));
+            glow.setColorAt(.48, QColor(95, 121, 255, 26));
+            glow.setColorAt(1, QColor(95, 121, 255, 8));
+            painter->fillRect(row, glow);
+        }
+        if (option.state & QStyle::State_Selected) painter->fillRect(row, QColor(145, 161, 206, 31));
+        else if (option.state & QStyle::State_MouseOver) painter->fillRect(row, QColor(255, 255, 255, 12));
+        if (current) painter->fillRect(QRect(row.topLeft(), QSize(3, row.height())), QColor("#87e0ff"));
+        painter->setPen(QColor(255, 255, 255, 14));
         painter->drawLine(row.bottomLeft(), row.bottomRight());
 
         QFont font = option.font;
-        font.setPixelSize(12);
+        font.setPixelSize(13);
         painter->setFont(font);
         painter->setPen(current ? QColor("#b8c5ff") : QColor("#a7abba"));
-        painter->drawText(QRect(row.left(), row.top(), numberWidth, row.height()), Qt::AlignCenter,
-                          current ? (m_playing ? "▶" : "Ⅱ") : index.data(NumberRole).toString());
+        const QRect marker(row.left(), row.top(), numberWidth, row.height());
+        if (current) paintMarker(painter, marker.center());
+        else painter->drawText(marker, Qt::AlignCenter, index.data(NumberRole).toString());
         const int trailing = row.right() + 1 - actionsWidth;
         painter->drawText(QRect(trailing - durationWidth, row.top(), durationWidth - 5, row.height()),
                           Qt::AlignRight | Qt::AlignVCenter, index.data(DurationRole).toString());
-        font.setPixelSize(17);
-        painter->setFont(font);
-        painter->drawText(QRect(trailing, row.top(), actionsWidth, row.height()), Qt::AlignCenter, "⋯");
+        playerIcon(PlayerIcon::More).paint(painter, QRect(trailing + 10, row.center().y() - 8, 16, 16));
 
         const int width = qMax(0, trailing - durationWidth - row.left() - numberWidth - textInset);
         QRect text(row.left() + numberWidth, row.top(), width, row.height());
         const auto subtitle = index.data(SubtitleRole).toString();
         if (!subtitle.isEmpty()) {
-            font.setPixelSize(11);
+            font.setPixelSize(12);
             painter->setFont(font);
             painter->setPen(QColor("#a7abba"));
             painter->drawText(text.adjusted(0, 23, 0, -4), Qt::AlignLeft | Qt::AlignVCenter,
@@ -139,7 +152,36 @@ public:
         painter->restore();
     }
 private:
+    void paintMarker(QPainter *painter, const QPoint &center) const {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setPen(Qt::NoPen);
+        QColor cyan("#88e5ff");
+        if (m_playing) {
+            const int restingHeights[] = {7, 13, 10};
+            for (int bar = 0; bar < 3; ++bar) {
+                double height = restingHeights[bar];
+                if (m_elapsed >= 0) {
+                    const double phase = (qMax<qint64>(0, m_elapsed - 140 * bar) % 900) / 900.;
+                    const double segment = phase < .45 ? phase / .45 : (1. - phase) / .55;
+                    const double pulse = (1. - std::cos(segment * 3.141592653589793)) / 2.;
+                    height = 5. + 10. * pulse;
+                    cyan.setAlphaF(.68 + .32 * pulse);
+                }
+                painter->setBrush(cyan);
+                painter->drawRoundedRect(QRectF(center.x() - 6.5 + 5 * bar, center.y() + 7.5 - height, 3, height), 1.5, 1.5);
+            }
+        } else {
+            painter->setBrush(cyan);
+            QPolygonF triangle;
+            triangle << center + QPoint(-4, -5) << center + QPoint(4, 0) << center + QPoint(-4, 5);
+            painter->drawPolygon(triangle);
+        }
+        painter->restore();
+    }
+
     QString m_currentFile;
+    qint64 m_elapsed = -1;
     bool m_playing = false;
 };
 
@@ -150,14 +192,16 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     setAccessibleName(m_heading);
     setAttribute(Qt::WA_DeleteOnClose);
     setAttribute(Qt::WA_StyledBackground);
+    setFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont));
     setStyleSheet(
-        "QFrame#trackDrawer { background: #151620; border: 1px solid #3b3d4d; border-radius: 6px; }"
+        "QFrame#trackDrawer { background: rgba(12, 14, 24, 239); border: 1px solid rgba(205, 216, 255, 62); border-radius: 9px; }"
         "QLabel { background: transparent; border: 0; color: #aab0c2; font-size: 12px; }"
         "QLabel#drawerTitle { color: #f4f5fa; font-size: 15px; font-weight: 600; }"
-        "QPushButton { background: #222430; border: 1px solid #353748; padding: 0; font-size: 18px; }"
+        "QLabel#drawerCount { font-size: 13px; }"
+        "QPushButton { background: #222430; border: 1px solid #353748; border-radius: 15px; padding: 0; }"
         "QPushButton:hover, QPushButton:focus { background: #34384d; border-color: #828aa7; }"
-        "QListView { background: #151620; border: 0; outline: 0; }"
-        "QScrollBar:vertical { background: #151620; width: 8px; margin: 0; }"
+        "QListView { background: transparent; border: 0; outline: 0; }"
+        "QScrollBar:vertical { background: #171923; width: 8px; margin: 0; }"
         "QScrollBar::handle:vertical { background: #4b4f64; min-height: 20px; border-radius: 3px; }"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
     auto *layout = new QVBoxLayout(this);
@@ -174,30 +218,43 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     m_title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_title->setToolTip(m_heading);
     heading->addWidget(m_title);
-    heading->addWidget(plainLabel(tracks.size() == 1 ? "1 song" : QString("%1 songs").arg(tracks.size()), this));
+    auto *count = plainLabel(tracks.size() == 1 ? "1 song" : QString("%1 songs").arg(tracks.size()), this);
+    count->setObjectName("drawerCount");
+    heading->addWidget(count);
     header->addLayout(heading, 1);
-    auto iconButton = [this, header](const QString &symbol, const QString &name) {
-        auto *button = new QPushButton(symbol, this);
+    auto iconButton = [this, header](PlayerIcon glyph, const QString &name) {
+        auto *button = new QPushButton(playerIcon(glyph), QString(), this);
         button->setFixedSize(32, 30);
+        button->setIconSize(QSize(17, 17));
         button->setAccessibleName(name);
         button->setToolTip(name);
         header->addWidget(button);
         return button;
     };
     if (albumContext) {
-        connect(iconButton("♡", "Favourite album"), &QPushButton::clicked, this, &TrackDrawer::albumFavouriteRequested);
+        connect(iconButton(PlayerIcon::Favourite, "Favourite album"), &QPushButton::clicked, this, &TrackDrawer::albumFavouriteRequested);
     }
-    connect(iconButton("×", "Close songs"), &QPushButton::clicked, this, &TrackDrawer::dismissRequested);
+    connect(iconButton(PlayerIcon::Close, "Close songs"), &QPushButton::clicked, this, &TrackDrawer::dismissRequested);
     layout->addLayout(header);
 
     auto *columns = new QHBoxLayout;
     columns->setContentsMargins(0, 3, actionsWidth + 5, 6);
-    auto *number = plainLabel("#", this);
+    auto column = [this](const QString &text) {
+        auto *label = plainLabel(text, this);
+        QFont font = label->font();
+        font.setPixelSize(11);
+        font.setWeight(QFont::DemiBold);
+        font.setLetterSpacing(QFont::AbsoluteSpacing, 1.2);
+        label->setFont(font);
+        label->setStyleSheet("font-size: 11px;");
+        return label;
+    };
+    auto *number = column("#");
     number->setFixedWidth(numberWidth);
     number->setAlignment(Qt::AlignCenter);
     columns->addWidget(number);
-    columns->addWidget(plainLabel("Title", this), 1);
-    columns->addWidget(plainLabel("Time", this));
+    columns->addWidget(column("TITLE"), 1);
+    columns->addWidget(column("TIME"));
     layout->addLayout(columns);
 
     auto *list = new TrackList(this);
@@ -232,6 +289,17 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     m_list->setModel(model);
     m_rowDelegate = new TrackRowDelegate(m_list);
     m_list->setItemDelegate(m_rowDelegate);
+    m_pulse.setInterval(33);
+    connect(m_list->verticalScrollBar(), &QScrollBar::valueChanged, this, &TrackDrawer::syncPulse);
+    connect(&m_pulse, &QTimer::timeout, this, [this] {
+        m_rowDelegate->setPulseTime(m_pulseTime.elapsed());
+        for (const int row : m_activeRows) {
+            QRect marker = m_list->visualRect(m_list->model()->index(row, 0));
+            marker.setWidth(numberWidth);
+            marker &= m_list->viewport()->rect();
+            if (!marker.isEmpty()) m_list->viewport()->update(marker);
+        }
+    });
     layout->addWidget(m_list, 1);
     if (tracks.isEmpty()) {
         auto *empty = plainLabel("No songs", this);
@@ -254,6 +322,12 @@ void TrackDrawer::open() {
     raise();
     if (m_list->model()->rowCount() > 0) m_list->setCurrentIndex(m_list->model()->index(0, 0));
     m_list->setFocus();
+    syncPulse();
+}
+
+void TrackDrawer::hideEvent(QHideEvent *event) {
+    m_pulse.stop();
+    QFrame::hideEvent(event);
 }
 
 bool TrackDrawer::eventFilter(QObject *watched, QEvent *event) {
@@ -269,10 +343,44 @@ void TrackDrawer::place() {
     m_stage->setCaptionClearance(geometry().bottom() + 1);
     layout()->activate();
     m_title->setText(m_title->fontMetrics().elidedText(m_heading, Qt::ElideMiddle, m_title->width()));
+    syncPulse();
 }
 
 void TrackDrawer::setPlayback(const PlayerState &state) {
-    if (m_rowDelegate->setPlayback(state)) m_list->viewport()->update();
+    if (!m_rowDelegate->setPlayback(state)) return;
+    m_playing = state.state == "play";
+    m_activeRows.clear();
+    const auto *model = m_list->model();
+    if (!m_rowDelegate->currentFile().isEmpty()) {
+        for (int row = 0; row < model->rowCount(); ++row) {
+            if (model->index(row, 0).data(FileRole).toString() == m_rowDelegate->currentFile()) m_activeRows.push_back(row);
+        }
+    }
+    syncPulse();
+    m_list->viewport()->update();
+}
+
+void TrackDrawer::setReducedMotion(bool reduced) {
+    m_reduced = reduced;
+    syncPulse();
+    m_list->viewport()->update();
+}
+
+void TrackDrawer::syncPulse() {
+    if (isVisible() && m_playing && !m_reduced) {
+        for (const int row : m_activeRows) {
+            const QRect marker = m_list->visualRect(m_list->model()->index(row, 0));
+            if (!marker.intersects(m_list->viewport()->rect())) continue;
+            if (!m_pulse.isActive()) {
+                m_pulseTime.start();
+                m_rowDelegate->setPulseTime(0);
+                m_pulse.start();
+            }
+            return;
+        }
+    }
+    m_pulse.stop();
+    m_rowDelegate->setPulseTime(-1);
 }
 
 void TrackDrawer::showTrackActions(const QModelIndex &index) {

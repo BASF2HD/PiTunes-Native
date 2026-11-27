@@ -11,9 +11,11 @@
 #include <QMenu>
 #include <QPointer>
 #include <QSignalSpy>
+#include <QSlider>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
+#include <QToolButton>
 #include <QUrlQuery>
 #include <QWheelEvent>
 
@@ -84,11 +86,11 @@ private slots:
         window.coverFlow()->select(1, false); QTest::qWait(220);
         QVERIFY(!window.findChild<TrackDrawer *>());
     }
-    void playingSongCaptionStaysWhileBrowsing() {
+    void captionFollowsTheCentredAlbumWhileBrowsing() {
         HttpFixture server;
         server.respond = [](const QByteArray &request) {
             if (request.startsWith("GET /api/library/albums")) {
-                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Playing album"},{"id":2,"title":"Browsing album"}],"total":2})"};
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Playing album"},{"id":2,"title":"Browsing album","albumArtist":"Album artist","year":1992}],"total":2})"};
             }
             return HttpFixture::Response{R"json({"status":{"state":"play"},"song":{"file":"record/song.flac",
                 "Title":"The song","Artist":"The singer","Album":"Playing album (1983)","year":"1983","albumId":1}})json"};
@@ -99,8 +101,81 @@ private slots:
         QTRY_COMPARE(flow->visibleCoverCount(), 2);
         const QString caption = "The song\nThe singer\nPlaying album | 1983";
         QTRY_COMPARE(flow->accessibleDescription(), caption);
-        flow->select(1, false);
+        flow->select(1);
+        QTRY_COMPARE(flow->accessibleDescription(), QString("Browsing album\nAlbum artist | 1992"));
+        flow->select(0, false);
         QCOMPARE(flow->accessibleDescription(), caption);
+    }
+    void albumStripBrowsesAcrossPagesWithoutChangingPlayback() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums?offset=0")) {
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"First"},{"id":2,"title":"Second"}],"total":4})"};
+            }
+            if (request.startsWith("GET /api/library/albums?offset=2")) {
+                return HttpFixture::Response{R"({"albums":[{"id":3,"title":"Third"},{"id":4,"title":"Last"}],"total":4})"};
+            }
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        QSlider *strip = nullptr;
+        for (auto *slider : window.findChildren<QSlider *>())
+            if (slider->accessibleName() == "Browse albums") strip = slider;
+        QVERIFY(strip);
+        QTRY_COMPARE(strip->maximum(), 3);
+        QTest::mouseClick(strip, Qt::LeftButton, Qt::NoModifier, QPoint(strip->width() - 2, strip->height() / 2));
+        QTRY_COMPARE(window.coverFlow()->currentIndex(), 3);
+        QTRY_COMPARE(window.coverFlow()->accessibleDescription(), QString("Last"));
+        QToolButton *previousAlbum = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Previous album") previousAlbum = button;
+        QVERIFY(previousAlbum);
+        QTest::mouseClick(previousAlbum, Qt::LeftButton);
+        QCOMPARE(window.coverFlow()->currentIndex(), 2);
+        QCOMPARE(strip->value(), 2);
+        for (const auto &request : server.requests) QVERIFY(!request.startsWith("POST "));
+    }
+    void drawerAnimatesOnlyThePlayingMarker() {
+        HttpFixture server;
+        ApiClient api(server.url());
+        LibraryModel library(&api);
+        library.setDemo();
+        ArtworkCache cache(&api);
+        CoverFlowWidget flow(&library, &cache);
+        flow.resize(800, 420);
+        flow.show();
+        Track track;
+        track.file = "album/song.flac";
+        track.title = "Song";
+        TrackDrawer drawer(&flow, "Album", "1983", {track}, true);
+        drawer.open();
+        auto *list = drawer.findChild<QListView *>();
+        const QRect row = list->visualRect(list->model()->index(0, 0));
+        QVERIFY(row.isValid());
+        const auto marker = [&] {
+            return list->viewport()->grab(QRect(row.left(), row.top(), 33, row.height())).toImage();
+        };
+        PlayerState state;
+        state.track = track;
+        state.state = "play";
+        drawer.setPlayback(state);
+        const auto start = marker();
+        QVERIFY(!start.isNull());
+        QTRY_VERIFY(marker() != start);
+        state.state = "pause";
+        drawer.setPlayback(state);
+        const auto paused = marker();
+        QVERIFY(paused != start);
+        QTest::qWait(120);
+        QCOMPARE(marker(), paused);
+        drawer.setReducedMotion(true);
+        state.state = "play";
+        drawer.setPlayback(state);
+        const auto reduced = marker();
+        QVERIFY(reduced != paused);
+        QTest::qWait(120);
+        QCOMPARE(marker(), reduced);
     }
     void trackDrawerPlaysTheSelectedFileWithTheAlbumQueue() {
         HttpFixture server;
@@ -151,8 +226,8 @@ private slots:
     }
     void demoNeverContactsAnAppliance() {
         HttpFixture server; MainWindow window(server.url(), true); window.show();
-        for (auto *button : window.findChildren<QPushButton *>())
-            if (button->text() == "Settings") QTest::mouseClick(button, Qt::LeftButton);
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Settings") QTest::mouseClick(button, Qt::LeftButton);
         QTest::qWait(100); QCOMPARE(server.requests.size(), 0);
     }
     void nativeWindowSerializesTransportIntents() {
@@ -164,15 +239,15 @@ private slots:
             return HttpFixture::Response{"{}", 80};
         };
         MainWindow window(server.url()); window.show();
-        QPushButton *play = nullptr, *next = nullptr;
-        for (auto *b : window.findChildren<QPushButton *>()) {
+        QToolButton *play = nullptr, *next = nullptr, *shuffle = nullptr;
+        for (auto *b : window.findChildren<QToolButton *>()) {
             if (b->accessibleName() == "Play or pause") play = b;
-            if (b->text() == "⏭") next = b;
+            if (b->accessibleName() == "Next song") next = b;
+            if (b->accessibleName().startsWith("Shuffle")) shuffle = b;
         }
-        QVERIFY(play); QVERIFY(next); QTRY_COMPARE(play->text(), QString("Ⅱ"));
-        bool shuffleChecked = false;
-        for (auto *b : window.findChildren<QPushButton *>()) if (b->text() == "Shuffle") shuffleChecked = b->isChecked();
-        QVERIFY(shuffleChecked);
+        QVERIFY(play); QVERIFY(next); QVERIFY(shuffle);
+        QTRY_VERIFY(play->property("playing").toBool());
+        QVERIFY(shuffle->isChecked());
         QTest::mouseClick(next, Qt::LeftButton); QTest::mouseClick(next, Qt::LeftButton);
         const auto nextCount = [&server] { int n = 0; for (const auto &r : server.requests) if (r.startsWith("POST /api/player/next")) ++n; return n; };
         QTRY_COMPARE(nextCount(), 2);
@@ -318,7 +393,7 @@ private slots:
         QTest::mouseClick(&widget, Qt::LeftButton, Qt::NoModifier, QPoint(262, 150));
         QCOMPARE(widget.currentIndex(), 3);
     }
-    void wheelAccumulatesSmallDeltasAndRetargets() {
+    void trackpadBurstKeepsPaintingBeforeTheGestureEnds() {
         HttpFixture server;
         ApiClient api(server.url());
         LibraryModel library(&api);
@@ -332,15 +407,22 @@ private slots:
                               Qt::NoButton, Qt::NoModifier, phase, false);
             QCoreApplication::sendEvent(&widget, &event);
         };
+        QTest::qWait(40);
+        const auto paints = widget.paintCount();
         scroll({0, -13}, {}, Qt::ScrollBegin);
-        scroll({0, -13}, {}, Qt::ScrollUpdate);
-        scroll({0, -13}, {}, Qt::ScrollUpdate);
         QCOMPARE(widget.currentIndex(), 0);
-        scroll({0, -13}, {}, Qt::ScrollUpdate);
-        QCOMPARE(widget.currentIndex(), 1);
-        QVERIFY(widget.animating());
-        scroll({}, {0, -240}, Qt::ScrollEnd);
+        for (int packet = 1; packet < 12; ++packet) {
+            QTest::qWait(5);
+            scroll({0, -13}, {}, Qt::ScrollUpdate);
+        }
         QCOMPARE(widget.currentIndex(), 3);
+        QVERIFY(widget.animating());
+        QVERIFY(widget.paintCount() > paints);
+        QVERIFY(widget.visualPosition() > 0. && widget.visualPosition() < 3.);
+        scroll({0, -13}, {}, Qt::ScrollMomentum);
+        scroll({}, {}, Qt::ScrollEnd);
+        QTRY_VERIFY(!widget.animating());
+        QCOMPARE(widget.visualPosition(), 3.);
         scroll({}, {0, 120}, Qt::NoScrollPhase);
         QCOMPARE(widget.currentIndex(), 2);
         QTRY_VERIFY(!widget.animating());
