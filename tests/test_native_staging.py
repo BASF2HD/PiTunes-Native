@@ -11,7 +11,7 @@ spec = importlib.util.spec_from_file_location("native_staging", ROOT / "tools/pr
 staging = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(staging)
 
-audit_spec = importlib.util.spec_from_file_location("native_rootfs_audit", ROOT / "scripts/audit-native-rootfs.py")
+audit_spec = importlib.util.spec_from_file_location("native_rootfs_audit", ROOT / "tools/audit-native-rootfs.py")
 audit = importlib.util.module_from_spec(audit_spec)
 audit_spec.loader.exec_module(audit)
 

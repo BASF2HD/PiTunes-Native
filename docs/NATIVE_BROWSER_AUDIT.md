@@ -33,7 +33,7 @@ The local session does not use nginx to display a page.
   start, both legacy launcher scripts fail closed and Samba and scan/hotspot
   ordering no longer refers to the retired unit.
 - The previous package gate covered four exact names and ran during kiosk
-  setup. `scripts/audit-native-rootfs.py` checks the final dpkg installed
+  setup. `tools/audit-native-rootfs.py` checks the final dpkg installed
   status, broad browser and WebEngine/WebView/WebKit/CEF package families,
   native ELF dependency evidence, LightDM wiring, the mask and the retained web
   files. Builders fail on a violation and export the final package manifest,

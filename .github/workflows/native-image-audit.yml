@@ -40,7 +40,7 @@ jobs:
           trap 'mountpoint -q "${mount_dir}" && sudo umount "${mount_dir}"; sudo losetup -d "${loop}"; rmdir "${mount_dir}"' EXIT
           sudo udevadm settle
           sudo mount -t ext4 -o ro,noload "${loop}p2" "${mount_dir}"
-          sudo python3 scripts/audit-native-rootfs.py --root "${mount_dir}" \
+          sudo python3 tools/audit-native-rootfs.py --root "${mount_dir}" \
             --output "${PWD}/evidence" --prefix "pitunes-native-${ARCH}" --report-only
       - uses: actions/upload-artifact@v4
         with:

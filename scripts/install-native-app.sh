@@ -34,5 +34,3 @@ fi
 if ldd /usr/bin/pitunes-native | grep -q 'not found'; then
   echo 'Native runtime has missing libraries.' >&2; exit 1
 fi
-install -d /opt/pitunes/config
-dpkg-query -W -f='${binary:Package}\t${Version}\n' >/opt/pitunes/config/native-packages.tsv

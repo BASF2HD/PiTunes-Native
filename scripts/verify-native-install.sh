@@ -5,7 +5,7 @@ test -x /usr/bin/pitunes-native
 test -s /usr/share/xsessions/pitunes-native.desktop
 test -s /etc/systemd/user/pitunes-native.service
 ldd /usr/bin/pitunes-native >/opt/pitunes/config/native-linked-libs.txt
-python3 /opt/pitunes/scripts/audit-native-rootfs.py --output /opt/pitunes/config
+python3 /opt/pitunes/tools/audit-native-rootfs.py --output /opt/pitunes/config
 test "$(readlink /etc/systemd/system/pitunes-update.service)" = /dev/null
 test "$(readlink /etc/systemd/system/pitunes-system-update.service)" = /dev/null
 QT_QPA_PLATFORM=offscreen /usr/bin/pitunes-native --demo \

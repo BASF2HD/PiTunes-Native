@@ -127,6 +127,7 @@ run apt-get install -y --no-install-recommends "${KERNEL}" initramfs-tools e2fsp
 SOURCE="${TARGET}/tmp/pitunes-src"
 mkdir "${SOURCE}"
 rsync -a --exclude='__pycache__' "${ROOT}"/{backend,config,frontend,nginx,scripts,systemd,native,CMakeLists.txt,install.sh,configure-mpd.sh} "${SOURCE}/"
+install -D -m 0644 "${ROOT}/tools/audit-native-rootfs.py" "${SOURCE}/tools/audit-native-rootfs.py"
 COMMIT="${PITUNES_INSTALL_COMMIT:-$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || true)}"
 run env PITUNES_IMAGE_BUILD=1 PITUNES_INSTALL_COMMIT="${COMMIT}" /tmp/pitunes-src/install.sh
 
@@ -160,7 +161,7 @@ test -s "${TARGET}/boot/grub/grub.cfg"
 [ "$(readlink "${TARGET}/etc/systemd/system/pitunes-update.service")" = /dev/null ]
 run nginx -t
 run /opt/pitunes/scripts/golden-image-cleanup.sh
-python3 "${ROOT}/scripts/audit-native-rootfs.py" --root "${TARGET}" --output "$(dirname "${OUTPUT}")" \
+python3 "${ROOT}/tools/audit-native-rootfs.py" --root "${TARGET}" --output "$(dirname "${OUTPUT}")" \
   --prefix "pitunes-native-${ARCH}"
 cp "${TARGET}/opt/pitunes/config/native-linked-libs.txt" "${OUTPUT%.img}.linked-libs.txt"
 ln -sf /etc/machine-id "${TARGET}/var/lib/dbus/machine-id"
