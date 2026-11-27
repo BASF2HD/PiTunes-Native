@@ -2,16 +2,20 @@
 #include "models/LibraryModel.h"
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
+#include "ui/TrackDrawer.h"
 #include <QBuffer>
 #include <QDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QListView>
+#include <QMenu>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
 #include <QUrlQuery>
+#include <QWheelEvent>
 
 using namespace PiTunes;
 
@@ -78,7 +82,72 @@ private slots:
         };
         QTRY_VERIFY(requestedAlbum());
         window.coverFlow()->select(1, false); QTest::qWait(220);
-        QCOMPARE(window.findChildren<QDialog *>().size(), 0);
+        QVERIFY(!window.findChild<TrackDrawer *>());
+    }
+    void playingSongCaptionStaysWhileBrowsing() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) {
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Playing album"},{"id":2,"title":"Browsing album"}],"total":2})"};
+            }
+            return HttpFixture::Response{R"json({"status":{"state":"play"},"song":{"file":"record/song.flac",
+                "Title":"The song","Artist":"The singer","Album":"Playing album (1983)","year":"1983","albumId":1}})json"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *flow = window.coverFlow();
+        QTRY_COMPARE(flow->visibleCoverCount(), 2);
+        const QString caption = "The song\nThe singer\nPlaying album (1983)";
+        QTRY_COMPARE(flow->accessibleDescription(), caption);
+        flow->select(1, false);
+        QCOMPARE(flow->accessibleDescription(), caption);
+    }
+    void trackDrawerPlaysTheSelectedFileWithTheAlbumQueue() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) {
+                return HttpFixture::Response{R"({"albums":[{"id":7,"title":"Album","year":1986}],"total":1})"};
+            }
+            if (request.startsWith("GET /api/library/album/7/tracks")) {
+                return HttpFixture::Response{R"({"tracks":[
+                    {"file":"album/first.flac","title":"First","artist":"Singer One","trackNumber":1},
+                    {"file":"album/second.flac","title":"Second","artist":"Singer Two","trackNumber":2,"duration":150}]})"};
+            }
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *flow = window.coverFlow();
+        QTRY_COMPARE(flow->visibleCoverCount(), 1);
+        QTest::keyClick(flow, Qt::Key_Return);
+        QTRY_VERIFY(window.findChild<TrackDrawer *>());
+        auto *drawer = window.findChild<TrackDrawer *>();
+        QCOMPARE(drawer->parentWidget(), flow);
+        QCOMPARE(drawer->accessibleName(), QString("Album (1986)"));
+        auto *list = drawer->findChild<QListView *>();
+        const auto second = list->model()->index(1, 0);
+        QVERIFY(second.data(Qt::AccessibleTextRole).toString().contains("Singer Two"));
+        const auto playRequest = [&server] {
+            for (const auto &request : server.requests) {
+                if (request.startsWith("POST /api/player/play ")) return request;
+            }
+            return QByteArray();
+        };
+        const QRect row = list->visualRect(second);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(row.right() - 8, row.center().y()));
+        auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        QVERIFY(menu);
+        QVERIFY(playRequest().isEmpty());
+        menu->hide();
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, row.center());
+        QTRY_VERIFY(!playRequest().isEmpty());
+        const auto request = playRequest();
+        const auto body = QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
+        QCOMPARE(body["file"].toString(), QString("album/second.flac"));
+        QCOMPARE(body["queue"].toArray(), QJsonArray({"album/first.flac", "album/second.flac"}));
+        QVERIFY(body["continuous"].toBool());
+        QTest::keyClick(list, Qt::Key_Escape);
+        QTRY_VERIFY(!window.findChild<TrackDrawer *>());
     }
     void demoNeverContactsAnAppliance() {
         HttpFixture server; MainWindow window(server.url(), true); window.show();
@@ -248,6 +317,33 @@ private slots:
         widget.repaint();
         QTest::mouseClick(&widget, Qt::LeftButton, Qt::NoModifier, QPoint(262, 150));
         QCOMPARE(widget.currentIndex(), 3);
+    }
+    void wheelAccumulatesSmallDeltasAndRetargets() {
+        HttpFixture server;
+        ApiClient api(server.url());
+        LibraryModel library(&api);
+        library.setDemo();
+        ArtworkCache cache(&api);
+        CoverFlowWidget widget(&library, &cache);
+        widget.resize(800, 400);
+        widget.show();
+        auto scroll = [&widget](QPoint pixels, QPoint angle, Qt::ScrollPhase phase) {
+            QWheelEvent event(QPointF(400, 150), QPointF(400, 150), pixels, angle,
+                              Qt::NoButton, Qt::NoModifier, phase, false);
+            QCoreApplication::sendEvent(&widget, &event);
+        };
+        scroll({0, -13}, {}, Qt::ScrollBegin);
+        scroll({0, -13}, {}, Qt::ScrollUpdate);
+        scroll({0, -13}, {}, Qt::ScrollUpdate);
+        QCOMPARE(widget.currentIndex(), 0);
+        scroll({0, -13}, {}, Qt::ScrollUpdate);
+        QCOMPARE(widget.currentIndex(), 1);
+        QVERIFY(widget.animating());
+        scroll({}, {0, -240}, Qt::ScrollEnd);
+        QCOMPARE(widget.currentIndex(), 3);
+        scroll({}, {0, 120}, Qt::NoScrollPhase);
+        QCOMPARE(widget.currentIndex(), 2);
+        QTRY_VERIFY(!widget.animating());
     }
     void coverStackFitsViewportAndSharesBaseline() {
         HttpFixture server;

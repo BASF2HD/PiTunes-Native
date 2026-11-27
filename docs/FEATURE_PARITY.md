@@ -7,19 +7,19 @@ with tests; do not mark entire groups complete after a screenshot.
 | Functionality | Original owner / qualification | Native state |
 |---|---|---|
 | Albums, pagination >5,000, sorting and grouping | queries/scanner, ID+artist+year | Native 200-row paging; 5,001-row contract test passed; hardware pending |
-| Songs and album track drawer | queries, virtual views | Native virtual lists and album playback; all-songs browse currently first 200 only |
+| Songs and album track drawer | queries, virtual views | Native overlay over the centre cover, with numbered virtual rows, singer, duration and row actions. All-songs browse currently first 200 only. |
 | Artists / album artists / composers | queries, album filters | Native filter lists implemented; album-artist identity retained |
 | Genres / years / album rating filters | queries; no rating editor | Native filters implemented, no rating setter |
 | Full-text search | SQLite FTS5, fallback | Native debounced album search; Enter opens matching songs, server limit 120 |
 | Scan progress, incremental rescan, cache rebuild | scanner/art resolver | Rescan/rebuild controls; progress presentation pending |
 | Artwork, missing/corrupt fallback | backend 128/420 thumbnails | Async bounded native cache/reflections/fallback, decode/LRU/jobs tested |
-| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter fits neighbours to the viewport. Covers share a bottom edge and nearer reflections hide farther ones. Resize, navigation, reflection and idle tests passed. Exact visual parity pending. |
+| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter fits neighbours to the viewport with an aligned bottom edge and masked reflections. Slide, turn and scale have separate easing. Resize, navigation, reflection and idle tests passed. Exact visual parity pending. |
 | Mouse, wheel, keyboard, touchscreen, drag | web event handlers | Native handlers implemented; keyboard QTest passed; physical touch pending |
 | Album/song direct playback | ID/file routes, fast start/full prefix | Native submits exact file/full album URI queue; MPD hardware pending |
 | Play / pause / stop / previous / next | MPD API | Native async intents, bounded serialization; real HTTP fixture transport tests |
 | Seek / volume / duration / elapsed | MPD; volume -1 means no mixer | Native sliders/status implemented; mixed types/no-mixer tested |
 | Repeat Off/All/Song, shuffle | MPD single/repeat/random, radio rejection | Native controls; original semantic tests retained; real MPD pending |
-| Queue and now-playing metadata | MPD, per-track artist/album/year | Backend retained; queue UI pending |
+| Queue and now-playing metadata | MPD, per-track artist/album/year | One caption below the centre cover shows the playing song, singer and album/year while browsing. Queue editing remains pending. |
 | Automatic next album without UI | idle watcher + backup poller | Backend retained; native must not duplicate. Native browse-context publication is still missing, so continuation sort/filter can differ |
 | Favourite songs / albums | userdata JSON, optimistic rollback | Basic native save/remove song and save album; album removal/optimistic UI pending |
 | Playlists create/add/browse/order | JSON trackIds, bulk one-write | Native create/browse/stored order; add-to-existing native UI pending |
@@ -43,7 +43,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; i386/amd64 1 GiB offline/UEFI/failure QEMU tests passed; physical boot pending |
 | Remote web controls/browser output | frontend/nginx | Source retained at existing paths |
 | Four bootable architecture images | Pi OS ARM, Debian x86 | Four staging paths tested; independent package CI/manual image workflow added; PC VM evidence and current image-build results in PROGRESS; no physical native boots |
-| Branding, logo/favicon/radio art | Original assets | Original black-and-white splash logo and icon in native resources; remote placeholders retained |
+| Branding, logo/favicon/radio art | Original assets | Native window icon and remote assets retained. The native player header omits the logo. |
 
 Physical acceptance includes supported formats/metadata, long playback while
 scanning, device removal, no NIC, wrong NAS/Wi-Fi credentials, receiver contention,

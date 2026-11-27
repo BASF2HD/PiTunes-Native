@@ -29,7 +29,8 @@ Track Track::fromJson(const QJsonObject &o) {
     return {first(o, {"file", "id"}), first(o, {"title", "Title", "Name"}),
         first(o, {"trackArtist", "artist", "Artist", "singer"}), first(o, {"album", "Album"}),
         first(o, {"albumId", "album_id"}), first(o, {"year", "Date"}),
-        numberValue(o.contains("duration") ? o["duration"] : o["Time"])};
+        numberValue(o.contains("duration") ? o["duration"] : o["Time"]),
+        first(o, {"trackNumber", "track", "Track"})};
 }
 PlayerState PlayerState::fromJson(const QJsonObject &o) {
     PlayerState p;
@@ -47,5 +48,13 @@ PlayerState PlayerState::fromJson(const QJsonObject &o) {
 QString timeLabel(double seconds) {
     const int s = qBound(0, int(qMin(seconds, 864000.)), 864000);
     return QString::number(s / 60) + ":" + QString::number(s % 60).rightJustified(2, '0');
+}
+QString albumWithYear(const QString &title, const QString &year) {
+    const auto album = title.trimmed();
+    const auto releaseYear = year.trimmed();
+    if (album.isEmpty() || releaseYear.isEmpty()) return album;
+    const QString suffix = "(" + releaseYear + ")";
+    if (album.endsWith(suffix) || album.endsWith("[" + releaseYear + "]")) return album;
+    return album + " " + suffix;
 }
 } // namespace PiTunes

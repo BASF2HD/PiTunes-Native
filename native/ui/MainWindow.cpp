@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "SettingsDialog.h"
 #include "TouchKeyboard.h"
+#include "TrackDrawer.h"
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -25,15 +26,13 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     auto *root = new QWidget(this); auto *layout = new QVBoxLayout(root);
     layout->setContentsMargins(20, 12, 20, 10); layout->setSpacing(4); setCentralWidget(root);
     auto *header = new QHBoxLayout; layout->addLayout(header);
-    auto *logo = new QLabel; logo->setPixmap(QPixmap(":/brand/logo.png").scaled(145, 42, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    header->addWidget(logo); m_elapsed = new QLabel("0:00"); m_elapsed->setMinimumWidth(42); header->addWidget(m_elapsed);
+    m_elapsed = new QLabel("0:00"); m_elapsed->setMinimumWidth(42); header->addWidget(m_elapsed);
     m_seek = new QSlider(Qt::Horizontal); m_seek->setAccessibleName("Playback position"); header->addWidget(m_seek, 1);
     m_duration = new QLabel("0:00"); m_duration->setMinimumWidth(42); header->addWidget(m_duration);
     auto *search = new QLineEdit; search->setPlaceholderText("Search library"); search->setMaximumWidth(220);
     search->setClearButtonEnabled(true); header->addWidget(search);
     auto *keyboardButton = new QPushButton("⌨"); keyboardButton->setAccessibleName("Open search keyboard"); header->addWidget(keyboardButton);
     m_flow = new CoverFlowWidget(m_library, m_artwork, this); m_flow->setReducedMotion(reduced); layout->addWidget(m_flow, 1);
-    m_now = new QLabel; m_now->setAlignment(Qt::AlignCenter); m_now->setWordWrap(true); layout->addWidget(m_now);
     auto *transport = new QHBoxLayout; layout->addLayout(transport);
     auto add = [this](QHBoxLayout *row, const QString &text, std::function<void()> action) {
         auto *button = new QPushButton(text); button->setMinimumHeight(40); row->addWidget(button);
@@ -101,10 +100,14 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     connect(m_flow, &CoverFlowWidget::activated, this, [this](int row) { showAlbum(row); });
     connect(m_flow, &CoverFlowWidget::selectionChanged, this, [this](int row) {
         ++m_drawerGeneration;
+        closeTrackDrawer();
         if (!m_demo && row >= m_library->rowCount() - 24) m_library->loadNext();
     });
     connect(m_library, &LibraryModel::error, this, &MainWindow::setMessage);
-    connect(m_library, &QAbstractItemModel::modelReset, this, [this] { ++m_drawerGeneration; });
+    connect(m_library, &QAbstractItemModel::modelReset, this, [this] {
+        ++m_drawerGeneration;
+        closeTrackDrawer();
+    });
     connect(m_library, &LibraryModel::pageLoaded, this, [this] {
         setMessage(m_demo ? "Demo mode · controls do not play audio" : QString("Albums | %1").arg(m_library->total()));
     });
@@ -153,17 +156,18 @@ void MainWindow::refreshPlayer() {
         if (!m_volume->isSliderDown()) m_volume->setValue(qMax(0, m_player.volume));
         m_volume->setEnabled(m_player.volume >= 0);
         m_elapsed->setText(timeLabel(m_player.elapsed)); m_duration->setText(timeLabel(m_player.duration));
-        const auto &track = m_player.track;
-        const auto info = track.title + (track.artist.isEmpty() ? "" : " · " + track.artist) + (track.album.isEmpty() ? "" : "\n" + track.album + " · " + track.year);
-        if (m_now->text() != info) m_now->setText(info);
-        m_flow->setPlayingAlbum(track.albumId);
+        m_flow->setPlayback(m_player);
+        if (m_trackDrawer) m_trackDrawer->setPlayback(m_player);
         if (m_message->text().contains("retrying automatically")) setMessage("Connected to PiTunes");
     });
 }
 void MainWindow::showAlbum(int row, bool play) {
     const auto *selected = m_library->album(row); if (!selected) return;
     const Album album = *selected;
-    if (m_demo) { showTracks(album.title, {{"demo/track.flac", "Demonstration track", album.artist, album.title, album.id, album.year, 210}}, album.id); return; }
+    if (m_demo) {
+        showTracks(album.title, {{"demo/track.flac", "Demonstration track", album.artist, album.title, album.id, album.year, 210, "1"}}, album.id, album.year);
+        return;
+    }
     const auto generation = ++m_drawerGeneration;
     const auto decodedId = QUrl::fromPercentEncoding(album.id.toUtf8());
     m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decodedId)) + "/tracks",
@@ -174,45 +178,51 @@ void MainWindow::showAlbum(int row, bool play) {
             if (play && !tracks.isEmpty()) {
                 QJsonArray queue; for (const auto &track : tracks) queue.append(track.file);
                 command("/api/player/play", {{"file", tracks.first().file}, {"albumId", album.id}, {"queue", queue}, {"continuous", true}});
-            } else showTracks(album.title + " · " + album.artist, tracks, album.id);
+            } else showTracks(album.title, tracks, album.id, album.year);
         });
 }
-void MainWindow::showTracks(QString title, QVector<Track> tracks, QString albumId) {
-    auto *dialog = new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(title); dialog->resize(680, 500);
-    auto *layout = new QVBoxLayout(dialog); auto *list = new QListView(dialog); auto *model = new QStandardItemModel(list);
-    list->setModel(model); list->setUniformItemSizes(true); layout->addWidget(list);
-    for (const auto &track : tracks) {
-        auto *item = new QStandardItem(track.title + "   ·   " + track.artist + "   " + timeLabel(track.duration));
-        item->setEditable(false); item->setSizeHint(QSize(200, 40)); model->appendRow(item);
-    }
-    auto *actions = new QHBoxLayout; layout->addLayout(actions);
-    auto button = [this, actions, dialog](const QString &text, std::function<void()> action) {
-        auto *b = new QPushButton(text, dialog); b->setMinimumHeight(38); actions->addWidget(b); connect(b, &QPushButton::clicked, this, std::move(action));
-    };
-    const auto play = [this, tracks, albumId](int row) {
+void MainWindow::closeTrackDrawer() {
+    if (!m_trackDrawer) return;
+    m_trackDrawer->close();
+    m_trackDrawer = nullptr;
+    m_flow->setCaptionClearance(0);
+    m_flow->setFocus();
+}
+void MainWindow::showTracks(const QString &title, const QVector<Track> &tracks, const QString &albumId, const QString &year) {
+    closeTrackDrawer();
+    auto *drawer = new TrackDrawer(m_flow, title, year, tracks, !albumId.isEmpty());
+    m_trackDrawer = drawer;
+    drawer->setPlayback(m_player);
+    connect(drawer, &TrackDrawer::dismissRequested, this, &MainWindow::closeTrackDrawer);
+    connect(drawer, &TrackDrawer::playRequested, this, [this, tracks, albumId](int row) {
         if (row < 0 || row >= tracks.size()) return;
-        QJsonArray queue; for (const auto &t : tracks) queue.append(t.file);
-        command("/api/player/play", {{"file", tracks[row].file}, {"albumId", albumId}, {"queue", queue}, {"continuous", !albumId.isEmpty()}});
-    };
-    connect(list, &QListView::activated, dialog, [play](const QModelIndex &i) { play(i.row()); });
-    button("Play", [list, play] { play(list->currentIndex().isValid() ? list->currentIndex().row() : 0); });
-    button("Favourite song", [this, list, tracks] { const int i = list->currentIndex().row(); if (i >= 0 && i < tracks.size()) command("/api/library/favourites", {{"trackId", tracks[i].file}, {"starred", true}}); });
-    button("Unfavourite song", [this, list, tracks] { const int i = list->currentIndex().row(); if (i >= 0 && i < tracks.size()) command("/api/library/favourites", {{"trackId", tracks[i].file}, {"starred", false}}); });
-    if (!albumId.isEmpty()) button("Favourite album", [this, albumId] { command("/api/library/favourites", {{"albumId", albumId}, {"starred", true}}); });
-    auto *playlistActions = new QHBoxLayout; layout->addLayout(playlistActions);
-    auto *create = new QPushButton("Save as playlist…", dialog); playlistActions->addWidget(create);
-    connect(create, &QPushButton::clicked, dialog, [this, dialog, tracks] {
-        bool ok; const auto name = QInputDialog::getText(dialog, "New playlist", "Name", QLineEdit::Normal, {}, &ok);
-        if (!ok || name.trimmed().isEmpty()) return;
-        QJsonArray ids; for (const auto &t : tracks) ids.append(t.file);
-        command("/api/library/playlists", {{"name", name.trimmed()}, {"trackIds", ids}});
+        QJsonArray queue;
+        for (const auto &track : tracks) queue.append(track.file);
+        command("/api/player/play", {{"file", tracks[row].file}, {"albumId", albumId},
+                                     {"queue", queue}, {"continuous", !albumId.isEmpty()}});
     });
-    auto *close = new QDialogButtonBox(QDialogButtonBox::Close, dialog); layout->addWidget(close);
-    connect(close, &QDialogButtonBox::rejected, dialog, &QDialog::reject); dialog->open();
+    connect(drawer, &TrackDrawer::trackFavouriteRequested, this, [this, tracks](int row, bool starred) {
+        if (row < 0 || row >= tracks.size()) return;
+        command("/api/library/favourites", {{"trackId", tracks[row].file}, {"starred", starred}});
+    });
+    connect(drawer, &TrackDrawer::albumFavouriteRequested, this, [this, albumId] {
+        command("/api/library/favourites", {{"albumId", albumId}, {"starred", true}});
+    });
+    connect(drawer, &TrackDrawer::savePlaylistRequested, this, [this, drawer, tracks] {
+        bool accepted;
+        const auto name = QInputDialog::getText(drawer, "New playlist", "Name", QLineEdit::Normal, {}, &accepted).trimmed();
+        if (!accepted || name.isEmpty()) return;
+        QJsonArray ids;
+        for (const auto &track : tracks) ids.append(track.file);
+        command("/api/library/playlists", {{"name", name}, {"trackIds", ids}});
+    });
+    drawer->open();
 }
 void MainWindow::showCollection(QString title, QString path, QString key, QString filterPrefix) {
     if (m_demo) { setMessage("Connect a backend to browse " + title); return; }
-    m_api->get(path, [this, title, key, filterPrefix](QJsonObject o, QString error) {
+    const auto generation = ++m_drawerGeneration;
+    m_api->get(path, [this, title, key, filterPrefix, generation](QJsonObject o, QString error) {
+        if (generation != m_drawerGeneration) return;
         if (!error.isEmpty()) { setMessage(error); return; }
         const auto rows = o[key].toArray();
         if (key == "tracks") {

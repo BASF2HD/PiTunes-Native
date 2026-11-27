@@ -74,6 +74,17 @@ A pixel test reproduced colour mixing on the old renderer and passed on both
 sides after the change. Debug and Release passed all 19 native cases. The fix
 was also checked with local album artwork.
 
+27 November: removed the player header logo and consolidated playback metadata
+under the centre cover. The caption shows the track, singer and album/year even
+while browsing other albums. The track drawer follows the PiTunes and
+NaviGlassPlayer layouts with a centred overlay, song count, numbered rows, singer,
+duration, current-track marker and action menus. Full album queue order and file
+identity are retained. Studied the supplied CoverFlow recordings and frame sheet
+to tune slide, rotation and scale independently. Wheel input accumulates small
+deltas and supports retargeting in flight. Checked the drawer at 1280×680, 800×480
+and 480×800 and inspected a native transition frame sequence. Debug and Release
+passed all 22 native cases. Hardware motion quality remains unmeasured.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

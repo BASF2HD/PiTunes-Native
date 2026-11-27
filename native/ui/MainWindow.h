@@ -3,10 +3,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QPointer>
 #include <QPushButton>
 #include <QSlider>
 #include <QQueue>
 namespace PiTunes {
+class TrackDrawer;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -17,7 +19,8 @@ private:
     void command(const QString &path, const QJsonObject &body = {});
     void sendNextCommand();
     void showAlbum(int row, bool play = false);
-    void showTracks(QString title, QVector<Track> tracks, QString albumId = {});
+    void showTracks(const QString &title, const QVector<Track> &tracks, const QString &albumId = {}, const QString &year = {});
+    void closeTrackDrawer();
     void showCollection(QString title, QString path, QString key, QString filterPrefix);
     void showRadio();
     void setMessage(const QString &message);
@@ -25,7 +28,8 @@ private:
     LibraryModel *m_library;
     ArtworkCache *m_artwork;
     CoverFlowWidget *m_flow;
-    QLabel *m_message, *m_elapsed, *m_duration, *m_now;
+    QPointer<TrackDrawer> m_trackDrawer;
+    QLabel *m_message, *m_elapsed, *m_duration;
     QPushButton *m_play, *m_repeat, *m_shuffle;
     QSlider *m_seek, *m_volume;
     QTimer m_poll, m_searchDelay;

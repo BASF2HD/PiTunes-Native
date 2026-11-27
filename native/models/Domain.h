@@ -14,6 +14,7 @@ struct Album {
 struct Track {
     QString file, title, artist, album, albumId, year;
     double duration = 0;
+    QString trackNumber;
     static Track fromJson(const QJsonObject &object);
 };
 struct PlayerState {
@@ -25,4 +26,5 @@ struct PlayerState {
     static PlayerState fromJson(const QJsonObject &object);
 };
 QString timeLabel(double seconds);
+QString albumWithYear(const QString &title, const QString &year);
 } // namespace PiTunes
