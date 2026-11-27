@@ -957,20 +957,21 @@ private slots:
         const auto paints = widget.paintCount();
         scroll({0, -13}, {}, Qt::ScrollBegin);
         QCOMPARE(widget.currentIndex(), 0);
-        for (int packet = 1; packet < 12; ++packet) {
+        // Span several 33 ms Linux paint ticks while packets are still arriving.
+        for (int packet = 1; packet < 25; ++packet) {
             QTest::qWait(5);
             scroll({0, -13}, {}, Qt::ScrollUpdate);
         }
-        QCOMPARE(widget.currentIndex(), 2);
+        QCOMPARE(widget.currentIndex(), 5);
         QVERIFY(widget.animating());
         QVERIFY(widget.paintCount() > paints);
-        QVERIFY(widget.visualPosition() > 0. && widget.visualPosition() < 3.);
+        QVERIFY(widget.visualPosition() > 0. && widget.visualPosition() < 6.);
         scroll({0, -13}, {}, Qt::ScrollMomentum);
         scroll({}, {}, Qt::ScrollEnd);
         QTRY_VERIFY(!widget.animating());
-        QCOMPARE(widget.visualPosition(), 3.);
+        QCOMPARE(widget.visualPosition(), 6.);
         scroll({}, {0, 120}, Qt::NoScrollPhase);
-        QCOMPARE(widget.currentIndex(), 2);
+        QCOMPARE(widget.currentIndex(), 5);
         QTRY_VERIFY(!widget.animating());
 
         scroll({0, -200}, {}, Qt::ScrollBegin);
@@ -979,10 +980,10 @@ private slots:
             scroll({0, -200}, {}, Qt::ScrollUpdate);
         }
         scroll({}, {}, Qt::ScrollEnd);
-        QCOMPARE(widget.currentIndex(), 8);
+        QCOMPARE(widget.currentIndex(), 11);
         QVERIFY(widget.animating());
         QTRY_VERIFY(!widget.animating());
-        QCOMPARE(widget.visualPosition(), 8.);
+        QCOMPARE(widget.visualPosition(), 11.);
     }
     void coverStackFitsViewport() {
         HttpFixture server;

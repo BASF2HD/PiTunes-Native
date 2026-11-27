@@ -248,6 +248,16 @@ queue, it resolves the next album using the ordering captured when playback
 began. The Mac preview sample was a 320 kbps 44.1 kHz MP3 and MPD showed
 44.1 kHz PCM. This verifies that example at the source and decoder level.
 The actual ALSA/CoreAudio device path still needs physical format verification.
+The real isolated Mac MPD preview passed manual Next across two albums and
+played a saved test station by ID with elapsed time advancing. Qt Debug and
+Release each reported 40 passing entries. Python passed 35 and Node passed 24.
+
+The 1 GiB Intel test image was requested for source `290ed70`.
+[Development image build](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46058291937).
+The same source’s Linux package CI showed the existing trackpad regression
+test could finish its packet replay before Linux’s 33 ms paint timer. Extended
+the burst to span several ticks without changing the application code in the
+image.
 
 ## Image and boot evidence
 
