@@ -34,9 +34,9 @@ static QByteArray compatibleSvg(const QByteArray &data) {
     if (source.contains("PiTunes STEREO")) converted.replace("fill=\"url(#p)\"", "fill=\"none\"");
     return converted.toUtf8();
 }
-ArtworkCache::ArtworkCache(ApiClient *api, int budgetMiB, QObject *parent)
+ArtworkCache::ArtworkCache(ApiClient *api, int budgetMiB, QObject *parent, int thumbnailPx)
     : QObject(parent), m_api(api), m_cache(qBound(4, budgetMiB, 32) * 1024 * 1024) {
-    m_edge = budgetMiB <= 6 ? 256 : 320;
+    m_edge = thumbnailPx > 0 ? qBound(64, thumbnailPx, 420) : budgetMiB <= 6 ? 256 : 320;
     m_workers.setMaxThreadCount(2);
     m_workers.setExpiryTimeout(5000);
 }

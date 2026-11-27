@@ -5,6 +5,7 @@
 #include "PlayerIcons.h"
 #include "FrostedSurface.h"
 #include "MediaInfoPanel.h"
+#include "RadioDialog.h"
 #include <QActionGroup>
 #include <QApplication>
 #include <QCollator>
@@ -34,6 +35,7 @@ namespace {
 constexpr int transportHeight = 35;
 constexpr int browseHeight = 40;
 constexpr int footerHeight = transportHeight + browseHeight;
+constexpr int headerControlSize = 24;
 
 QString albumTracksPath(const QString &id) {
     const auto decoded = QUrl::fromPercentEncoding(id.toUtf8());
@@ -111,6 +113,8 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         "QToolButton:hover, QToolButton:focus { color: white; background: #1a1d25; border: 1px solid #414651; border-radius: 5px; }"
         "QToolButton::menu-indicator { width: 0; }"
         "QToolButton#roundControl { border: 1px solid #383b45; border-radius: 16px; }"
+        "QToolButton#headerCircle { border: 1px solid #383b45; border-radius: 12px; }"
+        "QToolButton#headerIcon:hover, QToolButton#headerIcon:focus { border-radius: 12px; }"
         "QToolButton#captionHeart, QToolButton#captionHeart:hover, QToolButton#captionHeart:focus {"
         "border: 1px solid #383b45; border-radius: 14px; }"
         "QToolButton#trackStep:hover, QToolButton#trackStep:focus { border-radius: 16px;"
@@ -130,12 +134,18 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         button->setToolTip(label);
         return button;
     };
+    const auto headerButton = [iconButton](PlayerIcon icon, const QString &label, bool outlined = false) {
+        auto *button = iconButton(icon, label, headerControlSize);
+        button->setIconSize(QSize(15, 15));
+        button->setObjectName(outlined ? "headerCircle" : "headerIcon");
+        return button;
+    };
     auto *header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 0, 0);
-    header->setSpacing(9);
+    header->setSpacing(6);
     layout->addLayout(header);
     header->addStretch(1);
-    m_repeat = iconButton(PlayerIcon::Repeat, "Repeat off");
+    m_repeat = headerButton(PlayerIcon::Repeat, "Repeat off");
     m_repeat->setIcon(playerIcon(PlayerIcon::Repeat, false));
     header->addWidget(m_repeat);
     connect(m_repeat, &QToolButton::clicked, this, [this] {
@@ -143,27 +153,26 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         command("/api/player/options", {{"repeatMode", mode}});
     });
     m_time = new QLabel("0:00 / --:--", root);
-    m_time->setMinimumWidth(81);
+    m_time->setMinimumWidth(72);
+    m_time->setStyleSheet("font-size: 12px;");
     m_time->setAccessibleName("Playback time");
     header->addWidget(m_time);
     auto *seek = new PositionSlider(root);
     m_seek = seek;
     m_seek->setAccessibleName("Playback position");
-    m_seek->setMinimumHeight(26);
-    m_seek->setMaximumWidth(720);
+    m_seek->setFixedHeight(headerControlSize);
+    m_seek->setMaximumWidth(480);
     m_seek->setEnabled(false);
     m_seek->setStyleSheet(
-        "QSlider::groove:horizontal { height: 5px; background: #32343b; border-radius: 2px; }"
+        "QSlider::groove:horizontal { height: 4px; background: #32343b; border-radius: 2px; }"
         "QSlider::sub-page:horizontal { background: #a9adba; border-radius: 2px; }"
-        "QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: white; }");
+        "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: white; }");
     header->addWidget(m_seek, 4);
     seek->grooveClicked = [this] { command("/api/player/seek", {{"seconds", m_seek->value()}}); };
-    auto *searchToggle = iconButton(PlayerIcon::Search, "Open search");
-    searchToggle->setObjectName("roundControl");
+    auto *searchToggle = headerButton(PlayerIcon::Search, "Open search", true);
     searchToggle->setCheckable(true);
     header->addWidget(searchToggle);
-    m_volumeButton = iconButton(PlayerIcon::Volume, "Volume");
-    m_volumeButton->setObjectName("roundControl");
+    m_volumeButton = headerButton(PlayerIcon::Volume, "Volume", true);
     auto *volumeMenu = new FrostedMenu(m_flow, m_volumeButton);
     auto *volumeAction = new QWidgetAction(volumeMenu);
     auto *volumePanel = new QWidget(volumeMenu);
@@ -192,7 +201,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_volumeButton->setMenu(volumeMenu);
     m_volumeButton->setPopupMode(QToolButton::InstantPopup);
     header->addWidget(m_volumeButton);
-    m_shuffle = iconButton(PlayerIcon::Shuffle, "Shuffle off");
+    m_shuffle = headerButton(PlayerIcon::Shuffle, "Shuffle off");
     m_shuffle->setIcon(playerIcon(PlayerIcon::Shuffle, false));
     m_shuffle->setCheckable(true);
     header->addWidget(m_shuffle);
@@ -470,10 +479,10 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
                 }
             });
         }
-        connect(button, &QToolButton::clicked, menu, [button, menu] {
-            menu->popup(button->mapToGlobal(QPoint((button->width() - menu->sizeHint().width()) / 2,
-                                                    -menu->sizeHint().height() - 5)));
-        });
+        m_browseMenus.insert(button, menu);
+        menu->installEventFilter(this);
+        connect(menu, &QMenu::aboutToHide, this, [this] { m_pressedBrowseTab.clear(); });
+        connect(button, &QToolButton::clicked, this, [this, button] { openBrowseMenu(button); });
         watchBrowsePopup(menu);
         return menu;
     };
@@ -593,6 +602,16 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
     });
 }
 
+void MainWindow::openBrowseMenu(QToolButton *button) {
+    auto *menu = m_browseMenus.value(button);
+    if (!menu) return;
+    auto *activeMenu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+    if (activeMenu && m_browseMenus.key(activeMenu)) activeMenu->hide();
+    if (activeMenu == menu) return;
+    const auto size = menu->sizeHint();
+    menu->popup(button->mapToGlobal(QPoint((button->width() - size.width()) / 2, -size.height() - 5)));
+}
+
 void MainWindow::browseAlbums(const QString &filter, const QString &sort) {
     closeTrackDrawer();
     if (!m_demo) m_library->reload(filter, sort);
@@ -611,6 +630,24 @@ void MainWindow::browseSongs() {
 bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
     if (watched == m_searchPanel && event->type() == QEvent::LayoutRequest && m_searchPanel->isVisible()) {
         placeOverlays();
+    }
+    if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+        auto *menu = qobject_cast<QMenu *>(watched);
+        if (menu && m_browseMenus.key(menu)) {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() == Qt::LeftButton && !menu->rect().contains(menu->mapFromGlobal(mouse->globalPos()))) {
+                for (auto *button : m_browseMenus.keys()) {
+                    if (!button->rect().contains(button->mapFromGlobal(mouse->globalPos()))) continue;
+                    if (event->type() == QEvent::MouseButtonPress) m_pressedBrowseTab = button;
+                    else if (m_pressedBrowseTab == button) {
+                        menu->setAttribute(Qt::WA_NoMouseReplay);
+                        openBrowseMenu(button);
+                    }
+                    return true;
+                }
+            }
+            m_pressedBrowseTab.clear();
+        }
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -1098,17 +1135,13 @@ void MainWindow::showCollection(QString title, QString path, QString key, QStrin
     }, 30000);
 }
 void MainWindow::showRadio() {
-    bool ok; const auto search = QInputDialog::getText(this, "Internet radio", "Search stations (empty for saved stations)", QLineEdit::Normal, {}, &ok);
-    if (!ok || m_demo) return;
-    const auto path = search.trimmed().isEmpty() ? QString("/api/library/radio") : "/api/library/radio/search?limit=40&q=" + QString::fromUtf8(QUrl::toPercentEncoding(search));
-    m_api->get(path, [this](QJsonObject o, QString error) {
-        if (!error.isEmpty()) { setMessage(error); return; }
-        const auto stations = o["stations"].toArray(); QStringList names;
-        for (const auto &v : stations) names.append(textValue(v.toObject()["name"]));
-        bool ok; const auto name = QInputDialog::getItem(this, "Radio stations", "Station", names, 0, false, &ok);
-        const int i = names.indexOf(name); if (!ok || i < 0) return;
-        const auto station = stations[i].toObject();
-        command("/api/player/radio/play", {{"url", textValue(station.contains("streamUrl") ? station["streamUrl"] : station["url"])}, {"name", name}});
-    }, 45000);
+    if (m_demo) { setMessage("Demo mode · radio needs a PiTunes server"); return; }
+    auto *dialog = new RadioDialog(m_api, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &RadioDialog::playRequested, this, [this](const QJsonObject &station) {
+        command("/api/player/radio/play", station);
+    });
+    connect(dialog, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
+    dialog->open();
 }
 }

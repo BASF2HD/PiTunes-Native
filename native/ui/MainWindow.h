@@ -1,6 +1,7 @@
 #pragma once
 #include "coverflow/CoverFlowWidget.h"
 #include <QLabel>
+#include <QHash>
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QPointer>
@@ -32,6 +33,7 @@ private:
     void closeTrackDrawer();
     void showCollection(QString title, QString path, QString key, QString filterPrefix, QString sort = {});
     void buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool reduced);
+    void openBrowseMenu(QToolButton *button);
     void browseAlbums(const QString &filter, const QString &sort);
     void browseSongs();
     void showRadio();
@@ -63,6 +65,8 @@ private:
     CoverFlowWidget *m_flow;
     QPointer<TrackDrawer> m_trackDrawer;
     QPointer<MediaInfoPanel> m_infoPanel;
+    QHash<QToolButton *, QMenu *> m_browseMenus;
+    QPointer<QToolButton> m_pressedBrowseTab;
     QString m_drawerAlbumId;
     QLabel *m_message, *m_time;
     QToolButton *m_play, *m_repeat, *m_shuffle, *m_volumeButton, *m_mute;

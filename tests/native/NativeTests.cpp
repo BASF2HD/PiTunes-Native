@@ -3,9 +3,11 @@
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
 #include "ui/MediaInfoPanel.h"
+#include "ui/RadioDialog.h"
 #include "ui/SettingsDialog.h"
 #include "ui/TrackDrawer.h"
 #include <QBuffer>
+#include <QComboBox>
 #include <QDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,6 +19,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStyleOptionSlider>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -116,7 +119,8 @@ private slots:
             if (slider->accessibleName() == "Playback position") seek = slider;
         QVERIFY(seek);
         QTRY_COMPARE(seek->maximum(), 400);
-        QVERIFY(seek->width() <= 720);
+        QVERIFY(seek->width() <= 480);
+        QCOMPARE(seek->height(), 24);
         QTest::mouseClick(seek, Qt::LeftButton, Qt::NoModifier, seek->rect().center());
         QTRY_COMPARE(seeks.size(), 1);
         QVERIFY(qAbs(seeks[0] - 200) <= 2);
@@ -211,6 +215,132 @@ private slots:
         const auto horizontal = std::minmax_element(centres.cbegin(), centres.cend());
         QVERIFY(*horizontal.second - *horizontal.first < 520);
         QVERIFY(qAbs((*horizontal.second + *horizontal.first) / 2 - window.width() / 2) < 5);
+    }
+    void browsePopupHandsOffTheClickToTheNextMenu() {
+        HttpFixture server;
+        MainWindow window(server.url(), true);
+        window.resize(1000, 600);
+        window.show();
+        QHash<QString, QToolButton *> buttons;
+        for (auto *button : window.findChildren<QToolButton *>("browseTab")) buttons.insert(button->accessibleName(), button);
+        QVERIFY(buttons.contains("Albums"));
+        QTest::mouseClick(buttons["Albums"], Qt::LeftButton);
+        for (const QString name : {"Songs", "Artists", "Playlists", "More", "Settings", "Albums"}) {
+            QVERIFY(buttons.contains(name));
+            auto *popup = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QVERIFY(popup);
+            const auto *button = buttons.value(name);
+            const auto global = button->mapToGlobal(button->rect().center());
+            const auto local = popup->mapFromGlobal(global);
+            QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(popup, &press);
+            QCoreApplication::sendEvent(popup, &release);
+            auto *next = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QVERIFY(next && next != popup);
+            QCOMPARE(next->accessibleName(), name + " menu");
+        }
+        QApplication::activePopupWidget()->hide();
+    }
+    void settingsTabsSwitchByClick() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/audio/devices ")) return HttpFixture::Response{
+                R"({"routes":[{"id":"hdmi","label":"HDMI"},{"id":"usb-dac","label":"USB DAC"}]})"};
+            return HttpFixture::Response{"{}"};
+        };
+        ApiClient api(server.url());
+        SettingsDialog dialog(&api, {});
+        dialog.open();
+        auto *tabs = dialog.findChild<QTabWidget *>();
+        QVERIFY(tabs);
+        QCOMPARE(tabs->count(), 6);
+        for (const int row : {1, 2, 3, 4, 5, 0}) {
+            QTest::mouseClick(tabs->tabBar(), Qt::LeftButton, Qt::NoModifier, tabs->tabBar()->tabRect(row).center());
+            QCOMPARE(tabs->currentIndex(), row);
+            QVERIFY(tabs->widget(row)->isVisible());
+        }
+        tabs->setCurrentIndex(2);
+        QTRY_VERIFY(dialog.findChild<QComboBox *>("applianceAudioRoute"));
+        auto *routes = dialog.findChild<QComboBox *>("applianceAudioRoute");
+        QTRY_COMPARE(routes->count(), 2);
+        routes->showPopup();
+        auto *popup = routes->view()->window();
+        QVERIFY(popup->isVisible());
+        const auto global = tabs->tabBar()->mapToGlobal(tabs->tabBar()->tabRect(3).center());
+        const auto local = popup->mapFromGlobal(global);
+        QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(popup, &press);
+        QCoreApplication::sendEvent(popup, &release);
+        QCOMPARE(tabs->currentIndex(), 3);
+        QVERIFY(!popup->isVisible());
+    }
+    void radioSearchShowsArtworkAndSavesWithoutPlaying() {
+        HttpFixture server;
+        QImage art(64, 64, QImage::Format_RGB32);
+        art.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        QVERIFY(art.save(&buffer, "PNG"));
+        const QJsonObject station{{"name", "City Radio"}, {"url", "https://radio.invalid/live"}, {"externalUuid", "city-1"},
+                                  {"artUrl", "https://radio.invalid/logo?size=64&variant=dark"}, {"genre", "Jazz"}};
+        QJsonObject stored;
+        QJsonObject played;
+        server.respond = [&](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/radio/icon?")) return HttpFixture::Response{png};
+            QJsonObject response;
+            const auto body = QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
+            if (request.startsWith("GET /api/library/radio/search?")) response["stations"] = QJsonArray{station};
+            if (request.startsWith("GET /api/library/radio ")) response["stations"] = stored.isEmpty() ? QJsonArray{} : QJsonArray{stored};
+            if (request.startsWith("POST /api/library/radio/stations ")) {
+                stored = body;
+                stored["id"] = "saved-id";
+                response["station"] = stored;
+            }
+            if (request.startsWith("POST /api/player/radio/play ")) played = body;
+            return HttpFixture::Response{QJsonDocument(response).toJson()};
+        };
+        MainWindow window(server.url());
+        window.show();
+        for (auto *button : window.findChildren<QToolButton *>("browseTab"))
+            if (button->accessibleName() == "More") QTest::mouseClick(button, Qt::LeftButton);
+        auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        QVERIFY(menu);
+        for (auto *action : menu->actions()) {
+            if (action->text() != "Radio") continue;
+            menu->hide();
+            action->trigger();
+        }
+        auto *dialog = window.findChild<RadioDialog *>();
+        QVERIFY(dialog);
+        auto *input = dialog->findChild<QLineEdit *>();
+        auto *list = dialog->findChild<QListView *>();
+        QVERIFY(input && list);
+        input->setText("City Radio");
+        QTest::keyClick(input, Qt::Key_Return);
+        QTRY_COMPARE(list->model()->rowCount(), 1);
+        auto *cache = dialog->findChild<ArtworkCache *>();
+        QVERIFY(cache);
+        const auto key = "/api/library/radio/icon?wait=1&url=" +
+            QString::fromUtf8(QUrl::toPercentEncoding(station["artUrl"].toString()));
+        QTRY_VERIFY(cache->find(key));
+        QCOMPARE(cache->find(key)->cover.pixelColor(32, 32), QColor(Qt::red));
+        QMap<QString, QPushButton *> buttons;
+        for (auto *button : dialog->findChildren<QPushButton *>()) buttons[button->text()] = button;
+        QVERIFY(buttons.contains("Save station") && buttons.contains("Play station") && buttons.contains("Saved stations"));
+        auto *save = buttons.value("Save station");
+        QTest::mouseClick(save, Qt::LeftButton);
+        QTRY_COMPARE(save->text(), QString("Saved"));
+        QVERIFY(!save->isEnabled());
+        QVERIFY(played.isEmpty());
+        QCOMPARE(stored["artUrl"], station["artUrl"]);
+        QCOMPARE(stored["externalUuid"], station["externalUuid"]);
+        QTest::mouseClick(buttons.value("Saved stations"), Qt::LeftButton);
+        QTRY_COMPARE(list->model()->rowCount(), 1);
+        QTest::mouseClick(buttons.value("Play station"), Qt::LeftButton);
+        QTRY_COMPARE(played["stationId"].toString(), QString("saved-id"));
     }
     void fontTabResizesAndPersistsEachCaptionLine() {
         HttpFixture server;

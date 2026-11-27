@@ -5,10 +5,13 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlencode
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,6 +51,37 @@ class NativeHttpTest(unittest.TestCase):
         conn.putrequest("POST", "/api/library/smart-playlists/import")
         conn.putheader("Content-Length", 3 * 1024 * 1024); conn.endheaders()
         self.assertEqual(conn.getresponse().status, 413)
+
+    def test_native_radio_icon_wait_returns_art_on_a_cold_cache(self):
+        icon = b'<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32"/></svg>'
+
+        class StationSite(BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path != "/logo.svg":
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.end_headers()
+                self.wfile.write(icon)
+
+            def log_message(self, *_args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), StationSite) as site:
+            worker = threading.Thread(target=site.serve_forever, daemon=True)
+            worker.start()
+            try:
+                query = urlencode({"wait": 1, "url": f"http://127.0.0.1:{site.server_port}/logo.svg"})
+                with urllib.request.urlopen(self.url + "/api/library/radio/icon?" + query, timeout=5) as response:
+                    self.assertEqual(response.read(), icon)
+                query = urlencode({"wait": 1, "url": f"http://127.0.0.1:{site.server_port}/missing.svg"})
+                with self.assertRaises(urllib.error.HTTPError) as missing:
+                    urllib.request.urlopen(self.url + "/api/library/radio/icon?" + query, timeout=5)
+                self.assertEqual(missing.exception.code, 404)
+            finally:
+                site.shutdown()
+                worker.join()
 
 
 if __name__ == "__main__": unittest.main()

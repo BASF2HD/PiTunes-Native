@@ -29,6 +29,14 @@ int main(int argc, char **argv) {
         "QPushButton:hover,QPushButton:focus{border-color:#ddd;}QPushButton:checked{color:white;border-color:white;}"
         "QPushButton:disabled{color:#666;}QLineEdit,QComboBox{background:#18181b;border:1px solid #555;padding:7px;}"
         "QListView{background:#101012;border:0;}QListView::item:selected{background:#34343a;}"
+        "QScrollBar:vertical{background:transparent;width:8px;margin:0;border:0;}"
+        "QScrollBar:horizontal{background:transparent;height:8px;margin:0;border:0;}"
+        "QScrollBar::handle{background:#626878;border-radius:3px;}"
+        "QScrollBar::handle:vertical{min-height:24px;}QScrollBar::handle:horizontal{min-width:24px;}"
+        "QScrollBar::handle:hover{background:#8790a2;}"
+        "QScrollBar::add-page,QScrollBar::sub-page{background:transparent;}"
+        "QScrollBar::add-line,QScrollBar::sub-line{width:0;height:0;border:0;}"
+        "QAbstractScrollArea::corner{background:transparent;}"
         "QTabBar::tab{padding:10px;}QTabBar::tab:selected{border-bottom:2px solid white;}"
         "QSlider::groove:horizontal{height:3px;background:#555;}QSlider::handle:horizontal{background:white;width:12px;margin:-5px 0;border-radius:6px;}");
     bool reduced = parser.isSet("reduced-motion");

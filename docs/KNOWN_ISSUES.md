@@ -38,7 +38,7 @@ video as the only display-failure test, or treating checksum/boot as usability.
 
 Native all-songs browse currently loads the first 200 entries; album paging is
 tested through 5,001 entries. Queue editor, complete playlist editing, native CSV
-save, smart rule evaluation/builder, radio paging/favourites, shared browse-context
+save, smart rule evaluation/builder, radio favourites/removal, shared browse-context
 publishing/following, folder browsing, scan progress and complete preferences migration remain.
 Settings forms compile but actual Linux privileges/receivers/mount/audio are not
 validated. On-screen keyboard currently covers Latin letters/punctuation, not a

@@ -1427,15 +1427,18 @@ def get_radio_icon_file(query):
     url = first_value(query.get("url"))
     station_id = first_value(query.get("stationId"))
     title = first_value(query.get("title")) or "Radio"
+    wait = first_value(query.get("wait")) == "1"
     if not url and station_id:
         station = lib_userdata.get_radio_station(station_id)
         if station:
             url = str(station.get("artUrl") or station.get("favicon") or "").strip()
             title = str(station.get("name") or title)
     if url and url.startswith(("http://", "https://")):
-        cached = radio_icons.resolve_cached_file(url)
+        cached = radio_icons.resolve_cached_file(url, wait=wait)
         if cached:
             return cached
+    if wait:
+        return None
     return virtual_radio_cover(title)
 
 
@@ -2025,6 +2028,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(compat_radio_search(query))
             elif parsed.path == "/api/library/radio/icon":
                 icon_path = get_radio_icon_file(query)
+                if icon_path is None:
+                    raise ApiError(404, "Station logo unavailable")
                 self.send_file(icon_path, cache_control="max-age=86400")
             elif parsed.path == "/api/library/playlists":
                 self.send_json(compat_playlists())

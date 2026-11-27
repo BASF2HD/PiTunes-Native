@@ -11,7 +11,7 @@ struct Artwork { QImage cover, reflection; };
 class ArtworkCache : public QObject {
     Q_OBJECT
 public:
-    explicit ArtworkCache(ApiClient *api, int budgetMiB = 12, QObject *parent = nullptr);
+    explicit ArtworkCache(ApiClient *api, int budgetMiB = 12, QObject *parent = nullptr, int thumbnailPx = 0);
     ~ArtworkCache() override;
     const Artwork *find(const QString &key) const;
     // Only the most recent visible window can enqueue work. At most two network/decode jobs.

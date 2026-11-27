@@ -24,7 +24,7 @@ if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x8
   # Debian 12's non-SSE2 Qt baseline is retained; never inherit the build host CPU.
   target_compile_options(pitunes-core PUBLIC -march=i686 -mtune=generic -mfpmath=387)
 endif()
-set(PITUNES_UI_SOURCES native/ui/MainWindow.cpp native/ui/FrostedSurface.cpp native/ui/MediaInfoPanel.cpp native/ui/PlayerIcons.cpp native/ui/SettingsDialog.cpp native/ui/TouchKeyboard.cpp native/ui/TrackDrawer.cpp)
+set(PITUNES_UI_SOURCES native/ui/MainWindow.cpp native/ui/FrostedSurface.cpp native/ui/MediaInfoPanel.cpp native/ui/PlayerIcons.cpp native/ui/RadioDialog.cpp native/ui/SettingsDialog.cpp native/ui/TouchKeyboard.cpp native/ui/TrackDrawer.cpp)
 add_executable(pitunes-native native/app/main.cpp ${PITUNES_UI_SOURCES} native/assets.qrc)
 target_link_libraries(pitunes-native PRIVATE pitunes-core)
 target_compile_options(pitunes-native PRIVATE -Wall -Wextra -Wpedantic)

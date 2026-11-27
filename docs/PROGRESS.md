@@ -216,6 +216,24 @@ Mac Qt 5.15.19 Debug and Release each reported 36 passing QtTest entries.
 Python unittest discovery passed 33 tests and Node passed 24. The Mac output
 list displayed all three output-capable devices reported by the host.
 
+The playback row now uses 24 px controls and caps the song seek strip at
+480 px, giving CoverFlow more vertical room. Settings uses a 4 px panel radius,
+platform-neutral output labels and the shared scrollbar style. A click on
+another footer menu or settings tab now switches directly through an open
+popup. Local tests exercise all six menus, all Settings tabs and the handoff
+from an open audio dropdown.
+
+More → Radio opens a native search and saved-station browser. Radio Browser
+supplies station data and logos. Only visible thumbnails are fetched, with
+initials available when the upstream logo cannot be retrieved. Search paging
+and Save reuse the existing API and station store. The Qt test exercises art
+decode, saving independently of playback, and playing a saved station by ID.
+The real HTTP test covers a cold logo fetch and a missing logo response.
+The Mac preview was inspected with live BBC directory results. The isolated
+HTTP handler saved a station, deduplicated it by directory ID and returned it
+from saved stations. Qt 5.15.19 Debug and Release each reported 39 passing
+entries. Python unittest discovery passed 34 tests and Node passed 24.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;
@@ -258,7 +276,7 @@ inspecting actual VM screenshots; backend/remote output remains intact.
 
 See FEATURE_PARITY.md/KNOWN_ISSUES.md. All-songs browse currently first 200; queue
 editor, all-song paging, full playlist edits, native CSV, smart builder/evaluator/
-playback, radio paging/favourites/reconnect, folder browsing, scan progress, shared
+playback, radio favourites/removal/reconnect, folder browsing, scan progress, shared
 context publishing/following, applied persisted preferences, touch focus/IME and
 precise visual parity remain. Missing native browse context can change backend
 automatic continuation's sort/filter. These are code gaps, not hardware blockers.

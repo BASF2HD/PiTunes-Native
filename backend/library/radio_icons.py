@@ -64,12 +64,17 @@ def prefetch_async(remote_url: str) -> None:
     threading.Thread(target=worker, daemon=True, name="radio-icon-prefetch").start()
 
 
-def resolve_cached_file(remote_url: str) -> Path | None:
+def resolve_cached_file(remote_url: str, *, wait: bool = False) -> Path | None:
     url = str(remote_url or "").strip()
     if not url.startswith(("http://", "https://")):
         return None
     cached = cache_path(url)
     if cache_valid(cached):
         return cached
-    prefetch_async(url)
+    if wait:
+        # Native requests are limited to visible thumbnails and already run asynchronously.
+        if prefetch(url, timeout=3):
+            return cached
+    else:
+        prefetch_async(url)
     return None

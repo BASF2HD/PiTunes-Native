@@ -218,10 +218,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
         "QLabel#drawerCount { font-size: 13px; }"
         "QPushButton { background: #222430; border: 1px solid #353748; border-radius: 15px; padding: 0; }"
         "QPushButton:hover, QPushButton:focus { background: #34384d; border-color: #828aa7; }"
-        "QListView { background: transparent; border: 0; outline: 0; }"
-        "QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }"
-        "QScrollBar::handle:vertical { background: rgba(255,255,255,58); min-height: 20px; border-radius: 3px; }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
+        "QListView { background: transparent; border: 0; outline: 0; }");
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(1, 1, 1, 1);
     layout->setSpacing(0);

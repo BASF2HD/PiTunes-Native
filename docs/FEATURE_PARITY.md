@@ -17,7 +17,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Mouse, wheel, keyboard, touchscreen, drag | web event handlers | Native handlers implemented; keyboard QTest passed; physical touch pending |
 | Album/song direct playback | ID/file routes, fast start/full prefix | Native submits exact file/full album URI queue; MPD hardware pending |
 | Play / pause / stop / previous / next | MPD API | Circular play/pause and distinct track skip buttons below the covers. Stop is in the icon menu. Native async intents and bounded serialization tested against an HTTP fixture. |
-| Seek / volume / duration / elapsed | MPD; volume -1 means no mixer | Shorter playback ruler supports direct click-to-seek and drag. The volume popup toggles mute and restores the previous level. API payloads and reported state tested. |
+| Seek / volume / duration / elapsed | MPD; volume -1 means no mixer | Compact playback row with a 480 px maximum seek ruler supports direct click-to-seek and drag. The volume popup toggles mute and restores the previous level. API payloads and reported state tested. |
 | Repeat Off/All/Song, shuffle | MPD single/repeat/random, radio rejection | Icon controls in the top playback bar mirror reported state. Original semantic tests retained. Real MPD pending. |
 | Queue and now-playing metadata | MPD, per-track artist/album/year | The caption follows the centred album with album name and artist/year. On the playing album it shows song, singer and `Album \| Year`. Queue editing remains pending. |
 | Album and track details | NaviGlassPlayer metadata panels | Native More info shows selectable fields, including album totals, composer, singer, file path, codec and reported bitrate. Album tracks hydrate the panel by ID and relative URI. Missing tags are marked Unknown. |
@@ -27,12 +27,12 @@ with tests; do not mark entire groups complete after a screenshot.
 | Playlist rename/delete/remove/reorder | Absent in original | Requested extension pending |
 | Smart rule builder/evaluation | Browser localStorage, some fields absent | Shared additive definition import + remote export implemented/tested; native builder/evaluation/playback pending |
 | CSV selected lists, dedup, formula escaping | music-export.js exact 23 columns | Remote retained; native export pending |
-| Radio search/pagination/save/favourite/remove | Radio Browser proxy/JSON | Retained; native pending |
-| Radio MPD playback/errors/metadata | Streams/network dependent | Basic native search/saved-station playback; richer metadata/reconnect pending |
+| Radio search/pagination/save/favourite/remove | Radio Browser proxy/JSON | Native radio dialog searches and pages the directory, renders visible station logos, saves a result and browses saved stations. Favourite and remove controls remain pending. |
+| Radio MPD playback/errors/metadata | Streams/network dependent | Play by saved station ID or directory stream URL. Richer metadata and reconnect handling remain pending. |
 | USB/internal folder source and remount | mount helper/udev | Retained; native picker pending |
 | SMB/NFS NAS setup/retry/rescan | NetworkManager/storage backend | Retained; native NAS form implemented, mounting/recovery untested |
 | USB DAC, HDMI, analog, Pi I2S HAT | ALSA, overlays; known Pi gaps | Retained; capability UI/hardware pending |
-| Device/mixer selection and reboot warning | audio_output + helper | Native async appliance form. The Mac preview displays the appliance routes alongside the actual CoreAudio outputs and can select another Mac device explicitly. Linux hardware apply remains untested. |
+| Device/mixer selection and reboot warning | audio_output + helper | Native async appliance form. The desktop preview uses the System sound output label for host-device selection where supported. On macOS, CoreAudio provides the device list. Appliance routes remain available. Linux hardware apply remains untested. |
 | AirPlay / Bluetooth receiver toggles | services/BlueALSA/Shairport | Native service toggles implemented; actual receivers untested |
 | Pairing / now-playing / source arbitration | Discoverability exists; missing manager | Existing gap; backend/native work pending |
 | Wi-Fi scan/connect, AP recovery, status | NetworkManager worker/cache | Native form/scan/hotspot controls, hardware handoff pending |

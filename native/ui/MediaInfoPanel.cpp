@@ -43,10 +43,7 @@ MediaInfoPanel::MediaInfoPanel(CoverFlowWidget *stage, const QString &eyebrow, c
         "QLabel#detailValue { color: #f0f3fc; font-size: 13px; }"
         "QToolButton#closeMediaInfo { background: rgba(10,12,20,94);"
         "border: 1px solid rgba(225,232,245,58); border-radius: 15px; }"
-        "QToolButton#closeMediaInfo:hover, QToolButton#closeMediaInfo:focus { background: rgba(225,232,245,49); }"
-        "QScrollBar:vertical { width: 8px; background: transparent; }"
-        "QScrollBar::handle:vertical { min-height: 20px; border-radius: 3px; background: rgba(255,255,255,58); }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
+        "QToolButton#closeMediaInfo:hover, QToolButton#closeMediaInfo:focus { background: rgba(225,232,245,49); }");
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 8, 12, 8);
     auto *header = new QHBoxLayout;
