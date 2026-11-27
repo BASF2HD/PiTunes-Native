@@ -25,6 +25,7 @@ QLabel *infoLabel(const QString &text, const QString &name, QWidget *parent) {
     auto *label = new QLabel(text, parent);
     label->setObjectName(name);
     label->setTextFormat(Qt::PlainText);
+    label->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
     return label;
 }
 }

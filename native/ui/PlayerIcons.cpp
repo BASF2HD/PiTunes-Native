@@ -28,6 +28,10 @@ QPixmap renderIcon(PlayerIcon icon, const QColor &color) {
         painter.drawEllipse(at, radius, radius);
     };
     switch (icon) {
+    case PlayerIcon::Fullscreen:
+        stroke({{3, 9}, {3, 3}, {9, 3}}); stroke({{15, 3}, {21, 3}, {21, 9}});
+        stroke({{21, 15}, {21, 21}, {15, 21}}); stroke({{9, 21}, {3, 21}, {3, 15}});
+        break;
     case PlayerIcon::Repeat:
     case PlayerIcon::RepeatOne:
         stroke({{3, 10}, {3, 8}, {5, 6}, {20, 6}});

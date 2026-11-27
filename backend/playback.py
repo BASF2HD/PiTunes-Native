@@ -66,6 +66,7 @@ _play_context: dict[str, Any] = {
 
 _mpd_append_lock = threading.Lock()
 _mpd_append_generation = 0
+_mpd_append_pending_generation = None
 
 
 def _normalize_uri(uri: str) -> str:
@@ -94,11 +95,13 @@ def set_play_context(
     continuous: bool,
     album_id: str = "",
     entry_id: str = "",
+    browse_context: dict[str, Any] | None = None,
 ) -> None:
     with _play_lock:
         _play_context["continuous"] = bool(continuous)
         _play_context["album_id"] = str(album_id or "").strip()
         _play_context["entry_id"] = str(entry_id or "").strip()
+        _play_context["browse_context"] = browse_context
 
 
 def clear_continuous_playback() -> None:
@@ -214,23 +217,36 @@ def next_album_id_after(current_album_id: str, ctx: dict[str, Any] | None = None
     return album_ids[index + 1]
 
 
+def _mpd_append_pending() -> bool:
+    with _mpd_append_lock:
+        return _mpd_append_pending_generation == _mpd_append_generation
+
+
 def _mpd_append_uris_async(uris: list[str], *, listen_port: int = 8080, prepend: list[str] | None = None) -> None:
+    global _mpd_append_pending_generation
     with _mpd_append_lock:
         generation = _mpd_append_generation
+        _mpd_append_pending_generation = generation
 
     def worker() -> None:
-        entries = [(item, None) for item in uris] + [(item, 0) for item in reversed(prepend or [])]
-        for item, position in entries:
+        global _mpd_append_pending_generation
+        try:
+            entries = [(item, None) for item in uris] + [(item, 0) for item in reversed(prepend or [])]
+            for item, position in entries:
+                with _mpd_append_lock:
+                    if generation != _mpd_append_generation:
+                        return
+                    uri = _normalize_uri(item)
+                    if not uri:
+                        continue
+                    try:
+                        mpd_add_uri(uri, listen_port=listen_port, position=position)
+                    except Exception:
+                        pass
+        finally:
             with _mpd_append_lock:
-                if generation != _mpd_append_generation:
-                    return
-            uri = _normalize_uri(item)
-            if not uri:
-                continue
-            try:
-                mpd_add_uri(uri, listen_port=listen_port, position=position)
-            except Exception:
-                pass
+                if _mpd_append_pending_generation == generation:
+                    _mpd_append_pending_generation = None
 
     thread = threading.Thread(target=worker, name="pitunes-mpd-queue-append", daemon=True)
     thread.start()
@@ -244,6 +260,7 @@ def play_queue_fast(
     entry_id: str = "",
     continuous: bool = True,
     listen_port: int = 8080,
+    browse_context: dict[str, Any] | None = None,
 ) -> None:
     note_playback_activity()
     target = _normalize_uri(target_uri)
@@ -274,6 +291,7 @@ def play_queue_fast(
         continuous=bool(continuous) and bool(resolved_album_id),
         album_id=resolved_album_id,
         entry_id=str(entry_id or resolved_album_id),
+        browse_context=browse_context,
     )
 
     _cancel_mpd_append_queue()
@@ -303,7 +321,8 @@ def play_queue_fast(
     lib_ui_context.publish_playback("album", albumBrowseScope="all", playbackKey=target, entryId=resolved_album_id)
 
 
-def append_album_and_play(album_id: str, *, listen_port: int = 8080) -> bool:
+def append_album_and_play(album_id: str, *, listen_port: int = 8080,
+                          browse_context: dict[str, Any] | None = None) -> bool:
     uris = album_track_uris(album_id)
     if not uris:
         return False
@@ -345,7 +364,7 @@ def append_album_and_play(album_id: str, *, listen_port: int = 8080) -> bool:
         track_count=len(uris),
         first=first,
     )
-    set_play_context(continuous=True, album_id=str(album_id), entry_id=str(album_id))
+    set_play_context(continuous=True, album_id=str(album_id), entry_id=str(album_id), browse_context=browse_context)
     note_playback_activity()
     return True
 
@@ -368,6 +387,25 @@ _continue_lock = threading.Lock()
 _last_continue_at = 0.0
 
 
+def next_track_or_album(*, listen_port: int = 8080) -> None:
+    with _continue_lock:
+        with _play_lock:
+            album_id = str(_play_context.get("album_id") or "") if _play_context.get("continuous") else ""
+            browse_context = _play_context.get("browse_context")
+        appending = _mpd_append_pending()
+        status = mpd.single_map("status")
+        length = _status_int(status, "playlistlength")
+        at_end = length > 0 and _status_int(status, "song", -1) == length - 1
+        if album_id and at_end and status.get("repeat") != "1" and status.get("random") != "1":
+            if appending:
+                return  # The in-progress append has not exposed the next song yet.
+            next_album = next_album_id_after(album_id, browse_context)
+            if next_album and not append_album_and_play(next_album, listen_port=listen_port, browse_context=browse_context):
+                raise ApiError(502, "The next album has no playable tracks")
+            return
+        mpd.command("next")
+
+
 def maybe_continue_next_album(*, listen_port: int = 8080) -> bool:
     global _last_continue_at
     now = time.time()
@@ -383,6 +421,7 @@ def maybe_continue_next_album(*, listen_port: int = 8080) -> bool:
                 log_playback("continue_skip", reason="continuous_off")
                 return False
             current_album_id = str(_play_context.get("album_id") or "").strip()
+            browse_context = _play_context.get("browse_context")
 
         status = mpd.single_map("status")
         if status.get("repeat") == "1" or status.get("random") == "1":
@@ -418,14 +457,13 @@ def maybe_continue_next_album(*, listen_port: int = 8080) -> bool:
             if not near_track_end:
                 return False
 
-        ctx = lib_ui_context.get()
-        next_album_id = next_album_id_after(current_album_id, ctx)
+        next_album_id = next_album_id_after(current_album_id, browse_context)
         if not next_album_id:
             log_playback("continue_stop", reason="no_next_album", album_id=current_album_id)
             clear_continuous_playback()
             return False
 
-        if not append_album_and_play(next_album_id, listen_port=listen_port):
+        if not append_album_and_play(next_album_id, listen_port=listen_port, browse_context=browse_context):
             log_playback(
                 "continue_fail",
                 reason="append_failed",

@@ -49,9 +49,9 @@ double coverMoveProgress(double seconds) {
 
 CoverPose animateCover(const CoverPose &from, const CoverPose &to, double seconds) {
     const double move = coverMoveProgress(seconds);
-    // Settle the perspective with the turn, then finish on the screen-space rail.
+    // Match the separate position and rotation tweens used by NaviGlassPlayer.
     const double turn = easeOut(seconds, .28);
-    return {blend(from.x, to.x, move), blend(from.depth, to.depth, turn), blend(from.yaw, to.yaw, turn)};
+    return {blend(from.x, to.x, move), blend(from.depth, to.depth, move), blend(from.yaw, to.yaw, turn)};
 }
 
 CoverQuads projectCover(const CoverPose &pose, double pixels, const QPointF &origin) {

@@ -234,6 +234,21 @@ HTTP handler saved a station, deduplicated it by directory ID and returned it
 from saved stations. Qt 5.15.19 Debug and Release each reported 39 passing
 entries. Python unittest discovery passed 34 tests and Node passed 24.
 
+CoverFlow now switches between album, artist, song, playlist, search and saved
+station shelves. Browse changes keep MPD’s queue independent. Saved stations are
+played by ID from the cover double-click or station action. The centred library
+search uses both result types. Trackpad wheel events stay inside scrollable lists,
+track titles can be selected, the footer has a full-view button, and Settings can
+browse folders on the server. Album rail dragging uses direct selection while held.
+NaviGlassPlayer’s independent position and rotation timing is applied to the
+existing 36-degree geometry, with stable rail-based stacking.
+
+Manual Next preserves backend album continuation. At the end of an eligible
+queue, it resolves the next album using the ordering captured when playback
+began. The Mac preview sample was a 320 kbps 44.1 kHz MP3 and MPD showed
+44.1 kHz PCM. This verifies that example at the source and decoder level.
+The actual ALSA/CoreAudio device path still needs physical format verification.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;
@@ -274,8 +289,7 @@ inspecting actual VM screenshots; backend/remote output remains intact.
 
 ## Remaining implementation and release gates
 
-See FEATURE_PARITY.md/KNOWN_ISSUES.md. All-songs browse currently first 200; queue
-editor, all-song paging, full playlist edits, native CSV, smart builder/evaluator/
+See FEATURE_PARITY.md/KNOWN_ISSUES.md. Queue editor and full playlist edits, native CSV, smart builder/evaluator/
 playback, radio favourites/removal/reconnect, folder browsing, scan progress, shared
 context publishing/following, applied persisted preferences, touch focus/IME and
 precise visual parity remain. Missing native browse context can change backend

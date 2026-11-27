@@ -7,10 +7,10 @@ with tests; do not mark entire groups complete after a screenshot.
 | Functionality | Original owner / qualification | Native state |
 |---|---|---|
 | Albums, pagination >5,000, sorting and grouping | queries/scanner, ID+artist+year | Native 200-row paging and a translucent album transport strip with arrows, click-to-jump and drag. The Albums menu changes scope and sort independently. Idle browse returns to a playing album present in the current results after five seconds. |
-| Songs and album track drawer | queries, virtual views | Square frosted overlay with numbered virtual rows, track singer/artist, pulse indicator and row actions. The scanner recovers embedded M4A track credits on rescan without changing album IDs. The Songs menu opens tracks, favourite tracks, or album groups. All-songs browse and sorting cover the first 200 loaded entries. |
+| Songs and album track drawer | queries, virtual views | Square frosted overlay with numbered virtual rows, track singer/artist, pulse indicator and row actions. The scanner recovers embedded M4A track credits on rescan without changing album IDs. The Songs menu switches CoverFlow to paged per-track covers, favourite songs, or album groups. Two-finger scrolling stays in the drawer and dragging across a title selects its text. |
 | Artists / album artists / composers | queries, album filters | Native filter lists implemented; album-artist identity retained |
 | Genres / years / album rating filters | queries; no rating editor | Native filters implemented, no rating setter |
-| Full-text search | SQLite FTS5, fallback | Floating search panel and touch keyboard preserve cover and transport geometry. Debounced album search and matching songs use the server's 120-result limit. Closing restores the prior album scope and sort. |
+| Full-text search | SQLite FTS5, fallback | Floating search panel and touch keyboard preserve cover and transport geometry. Debounced library search shows matching song and album covers using the server’s result limits. Closing restores the prior album scope and sort. |
 | Scan progress, incremental rescan, cache rebuild | scanner/art resolver | Rescan/rebuild controls; progress presentation pending |
 | Artwork, missing/corrupt fallback | backend 128/420 thumbnails | Async bounded native cache/reflections/fallback, decode/LRU/jobs tested |
 | Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter projects borderless cover art and reflections from a shared floor. The earlier native 36-degree stack projection is paired with the NaviGlassPlayer-style retargeted glide for regular and fast scroll. Artwork remains visible behind the footer and frosted popups. |
@@ -21,15 +21,15 @@ with tests; do not mark entire groups complete after a screenshot.
 | Repeat Off/All/Song, shuffle | MPD single/repeat/random, radio rejection | Icon controls in the top playback bar mirror reported state. Original semantic tests retained. Real MPD pending. |
 | Queue and now-playing metadata | MPD, per-track artist/album/year | The caption follows the centred album with album name and artist/year. On the playing album it shows song, singer and `Album \| Year`. Queue editing remains pending. |
 | Album and track details | NaviGlassPlayer metadata panels | Native More info shows selectable fields, including album totals, composer, singer, file path, codec and reported bitrate. Album tracks hydrate the panel by ID and relative URI. Missing tags are marked Unknown. |
-| Automatic next album without UI | idle watcher + backup poller | Backend retained; native must not duplicate. Native browse-context publication is still missing, so continuation sort/filter can differ |
+| Automatic next album without UI | idle watcher + backup poller | Backend retained; native sends the album sort/filter with playback. Automatic continuation and manual Next at the end of an album share backend ordering |
 | Favourite songs / albums | userdata JSON, optimistic rollback | White album and inline song hearts load saved state, toggle both ways and roll back failed saves. Song hearts sit just before the duration. |
-| Playlists create/add/browse/order | JSON trackIds, bulk one-write | Native create, browse and sort. The row and caption menus add to existing playlists using ordered single-track calls and stop on the first failure. |
+| Playlists create/add/browse/order | JSON trackIds, bulk one-write | Native create, browse and sort, with the selected playlist shown as track covers. The row and caption menus add to existing playlists using ordered single-track calls and stop on the first failure. |
 | Playlist rename/delete/remove/reorder | Absent in original | Requested extension pending |
 | Smart rule builder/evaluation | Browser localStorage, some fields absent | Shared additive definition import + remote export implemented/tested; native builder/evaluation/playback pending |
 | CSV selected lists, dedup, formula escaping | music-export.js exact 23 columns | Remote retained; native export pending |
-| Radio search/pagination/save/favourite/remove | Radio Browser proxy/JSON | Native radio dialog searches and pages the directory, renders visible station logos, saves a result and browses saved stations. Favourite and remove controls remain pending. |
+| Radio search/pagination/save/favourite/remove | Radio Browser proxy/JSON | More → Radio shows saved station art on the CoverFlow shelf, with double-click or station actions for playback. Find internet radio searches and pages the directory and saves results. Favourite and remove controls remain pending. |
 | Radio MPD playback/errors/metadata | Streams/network dependent | Play by saved station ID or directory stream URL. Richer metadata and reconnect handling remain pending. |
-| USB/internal folder source and remount | mount helper/udev | Retained; native picker pending |
+| USB/internal folder source and remount | mount helper/udev | Native Settings folder picker browses readable directories on the API host, including locally mounted storage. Device lifecycle validation is pending. |
 | SMB/NFS NAS setup/retry/rescan | NetworkManager/storage backend | Retained; native NAS form implemented, mounting/recovery untested |
 | USB DAC, HDMI, analog, Pi I2S HAT | ALSA, overlays; known Pi gaps | Retained; capability UI/hardware pending |
 | Device/mixer selection and reboot warning | audio_output + helper | Native async appliance form. The desktop preview uses the System sound output label for host-device selection where supported. On macOS, CoreAudio provides the device list. Appliance routes remain available. Linux hardware apply remains untested. |
@@ -39,7 +39,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | SSH / services, system/about | audited backend helpers | Native controls, services disabled state needs hardware verification |
 | Reboot / shutdown | delayed backend actions | Native confirmation and API request; not executed on hardware |
 | Update status/log/progress/rollback | original source updater; Pi A/B gated | Native OTA intentionally disabled |
-| Fullscreen, low resolution, focus, touch keyboard | browser UI | Native fullscreen/F11/in-dialog keyboard; 800x480 and 480x800 screenshots checked; complete focus/IME pending |
+| Fullscreen, low resolution, focus, touch keyboard | browser UI | Native fullscreen button/F11 and in-dialog keyboard; 800x480 and 480x800 screenshots checked; complete focus/IME pending |
 | Persistent preferences/browse context | JSON/SQLite/localStorage/context | Local caption preferences persist independently for title, singer and album (10–80 px, default 40/25/25). Safe preference import exists. Native browse context publishing/following pending. |
 | Offline boot, display awake, GUI crash recovery | X11/LightDM/systemd | Native unprivileged X11/user service, awake commands and bounded recovery configured; i386/amd64 1 GiB offline/UEFI/failure QEMU tests passed; physical boot pending |
 | Remote web controls/browser output | frontend/nginx | Source retained at existing paths |

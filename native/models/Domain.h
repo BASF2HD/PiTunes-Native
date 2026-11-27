@@ -7,6 +7,8 @@ namespace PiTunes {
 QString textValue(const QJsonValue &value);
 double numberValue(const QJsonValue &value, double fallback = 0);
 bool boolValue(const QJsonValue &value);
+QString radioArtworkPath(const QJsonObject &station);
+QString radioStreamUrl(const QJsonObject &station);
 struct CaptionFontSizes {
     static constexpr int minimum = 10;
     static constexpr int maximum = 80;

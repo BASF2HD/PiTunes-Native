@@ -5,6 +5,7 @@ import threading
 import time
 import types
 import unittest
+from typing import Any
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ from shared import ApiError, mpd_quote
 
 
 def load_functions(file, names, context):
+    context.setdefault("Any", Any)
     tree = ast.parse((ROOT / file).read_text())
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
     assert len(functions) == len(names)
@@ -142,6 +144,26 @@ class PlaybackModesTest(unittest.TestCase):
                        "_play_context": {"continuous": True, "album_id": "1"}}
             load_functions("backend/playback.py", {"maybe_continue_next_album"}, context)
             self.assertFalse(context["maybe_continue_next_album"]())
+
+    def test_next_skips_tracks_then_advances_album_in_original_browse_order(self):
+        mpd = FakeMPD()
+        advanced = []
+        order = {"albumBrowseSort": "year-desc", "mode": "album"}
+        context = {
+            "mpd": mpd, "_play_lock": threading.Lock(), "_continue_lock": threading.Lock(),
+            "_play_context": {"continuous": True, "album_id": "7", "browse_context": order},
+            "_mpd_append_pending": lambda: False,
+            "next_album_id_after": lambda current, browse: "8" if current == "7" and browse == order else "",
+            "append_album_and_play": lambda album, **kw: advanced.append((album, kw["browse_context"])) or True,
+        }
+        load_functions("backend/playback.py", {"_status_int", "next_track_or_album"}, context)
+        mpd.status = {"song": "0", "playlistlength": "2"}
+        context["next_track_or_album"]()
+        self.assertEqual(mpd.commands, ["next"])
+        mpd.status["song"] = "1"
+        context["next_track_or_album"]()
+        self.assertEqual(mpd.commands, ["next"])
+        self.assertEqual(advanced, [("8", order)])
 
 
 if __name__ == "__main__":

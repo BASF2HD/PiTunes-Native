@@ -186,12 +186,17 @@ def list_albums(
     return {"albums": albums, "total": int(total), "offset": int(offset), "limit": int(limit)}
 
 
-def list_all_tracks(offset=0, limit=10000):
+def list_all_tracks(offset=0, limit=10000, sort=""):
     init_db()
     conn = get_connection()
     total = conn.execute("SELECT COUNT(*) AS c FROM tracks").fetchone()["c"]
+    priority = {
+        "year-asc": "a.year ASC, t.title COLLATE NOCASE,",
+        "year-desc": "a.year DESC, t.title COLLATE NOCASE,",
+        "title": "t.title COLLATE NOCASE,",
+    }.get(sort, "")
     rows = conn.execute(
-        """
+        f"""
         SELECT t.file_path, t.title, t.artist AS track_artist, t.track_number, t.duration_sec, t.rating,
                a.id AS album_id, a.title AS album_title, a.year, a.genre,
                ar.name AS artist_name, aa.name AS album_artist_name
@@ -199,8 +204,8 @@ def list_all_tracks(offset=0, limit=10000):
         JOIN albums a ON a.id = t.album_id
         LEFT JOIN artists ar ON ar.id = a.artist_id
         LEFT JOIN artists aa ON aa.id = a.album_artist_id
-        ORDER BY ar.name COLLATE NOCASE, a.title COLLATE NOCASE,
-                 t.disc_number, COALESCE(t.track_number, 9999), t.title COLLATE NOCASE
+        ORDER BY {priority} ar.name COLLATE NOCASE, a.title COLLATE NOCASE,
+                 t.disc_number, COALESCE(t.track_number, 9999), t.title COLLATE NOCASE, t.id
         LIMIT ? OFFSET ?
         """,
         (int(limit), int(offset)),

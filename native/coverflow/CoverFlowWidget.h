@@ -46,6 +46,7 @@ protected:
     void wheelEvent(QWheelEvent *) override;
     void mousePressEvent(QMouseEvent *) override;
     void mouseMoveEvent(QMouseEvent *) override;
+    void mouseDoubleClickEvent(QMouseEvent *) override;
     void mouseReleaseEvent(QMouseEvent *) override;
     bool event(QEvent *) override;
 private:
@@ -74,7 +75,7 @@ private:
     QPointF m_press;
     QVector<QPair<int, QPolygonF>> m_hits;
     QImage m_motionSurface;
-    QString m_playingId;
+    PlayerState m_captionPlayback;
     QStringList m_playingCaption;
     QStringList m_caption;
     bool m_captionShowsPlayback = false;

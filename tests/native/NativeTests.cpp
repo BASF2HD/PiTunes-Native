@@ -276,6 +276,56 @@ private slots:
         QCOMPARE(tabs->currentIndex(), 3);
         QVERIFY(!popup->isVisible());
     }
+    void menuSwitchesCoverShelfWithoutChangingPlayback() {
+        HttpFixture server;
+        QJsonObject played;
+        server.respond = [&](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) return HttpFixture::Response{
+                "{\"albums\":[{\"id\":1,\"title\":\"Album shelf\"}],\"total\":1}"};
+            if (request.startsWith("GET /api/library/tracks")) return HttpFixture::Response{
+                "{\"tracks\":[{\"file\":\"album/song.flac\",\"title\":\"Track shelf\",\"albumId\":1,\"artUrl\":\"/api/art?album_id=1\"}],\"total\":1}"};
+            if (request.startsWith("GET /api/search")) return HttpFixture::Response{
+                "{\"tracks\":[{\"file\":\"other.flac\",\"title\":\"Matching song\",\"albumId\":2}],\"albums\":[]}"};
+            if (request.startsWith("GET /api/library/radio ")) return HttpFixture::Response{
+                "{\"stations\":[{\"id\":\"station-id\",\"name\":\"Saved Radio\",\"streamUrl\":\"https://station.invalid/live\",\"artUrl\":\"https://station.invalid/logo.png\"}]}"};
+            if (request.startsWith("POST /api/player/radio/play "))
+                played = QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *model = window.findChild<LibraryModel *>();
+        QVERIFY(model);
+        QTRY_COMPARE(model->rowCount(), 1);
+        for (auto *button : window.findChildren<QToolButton *>("browseTab")) {
+            if (button->accessibleName() == "Songs") QTest::mouseClick(button, Qt::LeftButton);
+        }
+        QTRY_VERIFY(model->entry(0) && model->entry(0)->kind == CoverEntry::TrackCover);
+        QCOMPARE(model->entry(0)->face.title, QString("Track shelf"));
+        QApplication::activePopupWidget()->hide();
+        model->search("Matching");
+        QTRY_VERIFY(model->entry(0) && model->entry(0)->face.title == "Matching song");
+        model->search({});
+        QTRY_VERIFY(model->entry(0) && model->entry(0)->face.title == "Track shelf");
+        for (auto *button : window.findChildren<QToolButton *>("browseTab")) {
+            if (button->accessibleName() == "More") QTest::mouseClick(button, Qt::LeftButton);
+        }
+        auto *popup = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        QVERIFY(popup);
+        for (auto *action : popup->actions()) {
+            if (action->text() != "Radio") continue;
+            popup->hide();
+            action->trigger();
+        }
+        QTRY_VERIFY(model->entry(0) && model->entry(0)->kind == CoverEntry::StationCover);
+        QVERIFY(model->entry(0)->face.artUrl.startsWith("/api/library/radio/icon?"));
+        QVERIFY(!window.findChild<RadioDialog *>());
+        for (const auto &request : server.requests) QVERIFY(!request.startsWith("POST /api/player/"));
+        auto *flow = window.coverFlow();
+        flow->grab();
+        QTest::mouseDClick(flow, Qt::LeftButton, Qt::NoModifier, flow->centreCoverRect().center());
+        QTRY_COMPARE(played["stationId"].toString(), QString("station-id"));
+    }
     void radioSearchShowsArtworkAndSavesWithoutPlaying() {
         HttpFixture server;
         QImage art(64, 64, QImage::Format_RGB32);
@@ -309,7 +359,7 @@ private slots:
         auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
         QVERIFY(menu);
         for (auto *action : menu->actions()) {
-            if (action->text() != "Radio") continue;
+            if (action->text() != "Find internet radio…") continue;
             menu->hide();
             action->trigger();
         }
@@ -973,18 +1023,18 @@ private slots:
             }
         }
     }
-    void motionFinishesDepthAndRotationBeforeTheFinalGlide() {
+    void motionTurnsFirstAndGlidesToTheRestingGeometry() {
         const auto side = coverPose(1.);
         const auto center = coverPose(0.);
         const auto incoming = animateCover(side, center, .28);
         QCOMPARE(incoming.yaw, 0.);
         QVERIFY(incoming.x > 0.);
-        QCOMPARE(incoming.depth, 0.);
+        QVERIFY(incoming.depth > 0.);
         double lastX = side.x;
         for (int ms = 0; ms <= 420; ++ms) {
             const auto pose = animateCover(side, center, ms / 1000.);
             QVERIFY(pose.x <= lastX && pose.x >= center.x);
-            QVERIFY(qAbs(pose.depth / side.depth - pose.yaw / side.yaw) < .00001);
+            QVERIFY(qAbs(pose.depth / side.depth - pose.x / side.x) < .00001);
             lastX = pose.x;
         }
         const auto settled = animateCover(side, center, coverMoveDuration);

@@ -1,5 +1,6 @@
 #include "RadioDialog.h"
 #include "PlayerIcons.h"
+#include "WheelList.h"
 #include "models/Domain.h"
 #include <QEvent>
 #include <QHBoxLayout>
@@ -11,6 +12,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QScroller>
+#include <QShortcut>
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
 #include <QTimer>
@@ -23,19 +25,6 @@ constexpr int logoRole = Qt::UserRole + 2;
 constexpr int stationHeight = 56;
 constexpr int pageSize = 24;
 constexpr int maxSearchRows = 240;
-
-QString streamUrl(const QJsonObject &station) {
-    const auto stream = textValue(station["streamUrl"]);
-    return stream.isEmpty() ? textValue(station["url"]) : stream;
-}
-
-QString logoPath(const QJsonObject &station) {
-    auto logo = textValue(station["artUrl"]);
-    if (logo.isEmpty()) logo = textValue(station["favicon"]);
-    const QUrl url(logo);
-    if ((url.scheme() != "https" && url.scheme() != "http") || url.host().isEmpty() || !url.userInfo().isEmpty()) return {};
-    return "/api/library/radio/icon?wait=1&url=" + QString::fromUtf8(QUrl::toPercentEncoding(logo));
-}
 
 class StationDelegate : public QStyledItemDelegate {
 public:
@@ -123,7 +112,7 @@ RadioDialog::RadioDialog(ApiClient *api, QWidget *parent)
     m_status->setTextFormat(Qt::PlainText);
     m_status->setWordWrap(true);
     layout->addWidget(m_status);
-    m_list = new QListView(this);
+    m_list = new WheelList(this);
     m_list->setAccessibleName("Radio stations");
     m_list->setUniformItemSizes(true);
     m_list->setMouseTracking(true);
@@ -155,7 +144,10 @@ RadioDialog::RadioDialog(ApiClient *api, QWidget *parent)
     connect(saved, &QPushButton::clicked, this, [this] { loadStations({}); });
     connect(close, &QPushButton::clicked, this, &QDialog::reject);
     connect(m_play, &QPushButton::clicked, this, &RadioDialog::playSelected);
-    connect(m_list, &QListView::activated, this, &RadioDialog::playSelected);
+    connect(m_list, &QListView::doubleClicked, this, &RadioDialog::playSelected);
+    auto *playFromList = new QShortcut(QKeySequence(Qt::Key_Return), m_list);
+    playFromList->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(playFromList, &QShortcut::activated, this, &RadioDialog::playSelected);
     connect(m_save, &QPushButton::clicked, this, &RadioDialog::saveSelected);
     connect(m_more, &QPushButton::clicked, this, [this] { loadStations(m_search, m_nextOffset); });
     connect(m_list->selectionModel(), &QItemSelectionModel::currentChanged, this, &RadioDialog::syncActions);
@@ -199,12 +191,12 @@ void RadioDialog::loadStations(const QString &query, int offset) {
         }
         for (const auto &value : stations) {
             const auto station = value.toObject();
-            if (streamUrl(station).isEmpty()) continue;
+            if (radioStreamUrl(station).isEmpty()) continue;
             if (saved) guard->rememberSaved(station);
             auto *item = new QStandardItem(textValue(station["name"]));
             item->setEditable(false);
             item->setData(station, stationRole);
-            item->setData(logoPath(station), logoRole);
+            item->setData(radioArtworkPath(station), logoRole);
             guard->m_model->appendRow(item);
         }
         if (!guard->m_list->currentIndex().isValid()) guard->m_list->setCurrentIndex(guard->m_model->index(0, 0));
@@ -221,12 +213,12 @@ void RadioDialog::loadStations(const QString &query, int offset) {
 void RadioDialog::rememberSaved(const QJsonObject &station) {
     const auto id = textValue(station["externalUuid"]);
     if (!id.isEmpty()) m_savedUuids.insert(id);
-    const auto url = streamUrl(station);
+    const auto url = radioStreamUrl(station);
     if (!url.isEmpty()) m_savedUrls.insert(url);
 }
 
 bool RadioDialog::isSaved(const QJsonObject &station) const {
-    return m_search.isEmpty() || m_savedUuids.contains(textValue(station["externalUuid"])) || m_savedUrls.contains(streamUrl(station));
+    return m_search.isEmpty() || m_savedUuids.contains(textValue(station["externalUuid"])) || m_savedUrls.contains(radioStreamUrl(station));
 }
 
 void RadioDialog::syncActions() {
@@ -240,7 +232,7 @@ void RadioDialog::syncActions() {
 void RadioDialog::playSelected() {
     const auto station = m_list->currentIndex().data(stationRole).toJsonObject();
     if (station.isEmpty()) return;
-    QJsonObject body{{"url", streamUrl(station)}, {"name", station["name"]}};
+    QJsonObject body{{"url", radioStreamUrl(station)}, {"name", station["name"]}};
     const auto id = textValue(station["id"]);
     if (m_search.isEmpty() && !id.isEmpty()) body["stationId"] = id;
     emit playRequested(body);

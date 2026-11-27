@@ -1,9 +1,22 @@
 #include "Domain.h"
+#include <QUrl>
 #include <QRegularExpression>
 #include <QtMath>
 #include <cmath>
 
 namespace PiTunes {
+QString radioStreamUrl(const QJsonObject &station) {
+    const auto stream = textValue(station["streamUrl"]);
+    return stream.isEmpty() ? textValue(station["url"]) : stream;
+}
+
+QString radioArtworkPath(const QJsonObject &station) {
+    auto logo = textValue(station["artUrl"]);
+    if (logo.isEmpty()) logo = textValue(station["favicon"]);
+    const QUrl url(logo);
+    if ((url.scheme() != "https" && url.scheme() != "http") || url.host().isEmpty() || !url.userInfo().isEmpty()) return {};
+    return "/api/library/radio/icon?wait=1&url=" + QString::fromUtf8(QUrl::toPercentEncoding(logo));
+}
 QString textValue(const QJsonValue &v) {
     if (v.isString()) return v.toString();
     if (v.isDouble()) return QString::number(v.toDouble(), 'g', 16);

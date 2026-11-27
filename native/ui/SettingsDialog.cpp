@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QListView>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -35,6 +36,67 @@
 
 namespace PiTunes {
 namespace {
+void chooseMusicFolder(ApiClient *api, QLineEdit *field, QWidget *parent) {
+    auto *dialog = new QDialog(parent);
+    dialog->setWindowTitle("Choose music folder");
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->resize(510, 395);
+    auto *layout = new QVBoxLayout(dialog);
+    auto *path = new QLabel(dialog);
+    path->setTextFormat(Qt::PlainText);
+    path->setWordWrap(true);
+    layout->addWidget(path);
+    auto *folders = new QListWidget(dialog);
+    layout->addWidget(folders, 1);
+    auto *status = new QLabel(dialog);
+    status->setTextFormat(Qt::PlainText);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+    auto *row = new QHBoxLayout;
+    auto *up = new QPushButton("Up", dialog);
+    auto *choose = new QPushButton("Choose this folder", dialog);
+    auto *cancel = new QPushButton("Cancel", dialog);
+    row->addWidget(up); row->addStretch(); row->addWidget(choose); row->addWidget(cancel);
+    layout->addLayout(row);
+    const QPointer<QDialog> guard(dialog);
+    const auto load = [=](const QString &folder) {
+        up->setEnabled(false);
+        choose->setEnabled(false);
+        folders->clear();
+        status->setText("Loading folders…");
+        api->get("/api/filesystem/browse?path=" + QString::fromUtf8(QUrl::toPercentEncoding(folder)),
+            [=](QJsonObject response, QString error) {
+                if (!guard) return;
+                status->setText(error);
+                if (!error.isEmpty()) {
+                    up->setProperty("parentPath", QString());
+                    up->setEnabled(!folder.isEmpty());
+                    return;
+                }
+                path->setText(textValue(response["path"]));
+                const auto parentPath = textValue(response["parent"]);
+                up->setProperty("parentPath", parentPath);
+                up->setEnabled(!parentPath.isEmpty());
+                choose->setEnabled(!path->text().isEmpty());
+                for (const auto &value : response["entries"].toArray()) {
+                    const auto entry = value.toObject();
+                    auto *item = new QListWidgetItem(textValue(entry["name"]), folders);
+                    item->setData(Qt::UserRole, textValue(entry["path"]));
+                    if (!boolValue(entry["readable"])) item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+                }
+            });
+    };
+    QObject::connect(up, &QPushButton::clicked, dialog, [=] { load(up->property("parentPath").toString()); });
+    QObject::connect(folders, &QListWidget::itemActivated, dialog, [=](QListWidgetItem *item) {
+        const auto next = item->data(Qt::UserRole).toString();
+        load(next);
+    });
+    QObject::connect(choose, &QPushButton::clicked, dialog, [=] { field->setText(path->text()); dialog->accept(); });
+    QObject::connect(cancel, &QPushButton::clicked, dialog, &QDialog::reject);
+    load(field->text().trimmed());
+    dialog->open();
+}
+
 class SettingsComboBox : public QComboBox {
 public:
     SettingsComboBox(QTabBar *tabs, QWidget *parent) : QComboBox(parent), m_tabs(tabs) {}
@@ -193,7 +255,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         "QTabBar::tab:hover:!selected { color: white; }"
         "QToolButton#settingsClose { background: #212734; border: 0; border-radius: 14px; }"
         "QToolButton#settingsClose:hover, QToolButton#settingsClose:focus { background: #414a5c; }"
-        "QSpinBox, QComboBox, QPushButton { color: white; background: #202631; padding: 4px; "
+        "QLineEdit, QSpinBox, QComboBox, QPushButton { color: white; background: #202631; padding: 4px; "
         "border: 1px solid #404a5c; border-radius: 5px; }"
         "QSpinBox { padding-right: 24px; }"
         "QSpinBox::up-button, QSpinBox::down-button { subcontrol-origin: padding; width: 21px; border: 0; }"
@@ -255,8 +317,12 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         auto *edit = new QLineEdit; if (secret) edit->setEchoMode(QLineEdit::Password);
         form->addRow(label, edit); keyboard->watch(edit); return edit;
     };
-    auto button = [this](QFormLayout *form, const QString &text, std::function<void()> action) {
-        auto *b = new QPushButton(text, this); b->setMinimumHeight(38); form->addRow(b);
+    auto button = [this](QFormLayout *form, const QString &text, std::function<void()> action, QHBoxLayout *row = nullptr) {
+        auto *b = new QPushButton(text, this);
+        b->setMinimumHeight(30);
+        b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        if (row) row->addWidget(b);
+        else form->addRow(b);
         connect(b, &QPushButton::clicked, this, std::move(action)); return b;
     };
     auto *font = page("Font");
@@ -298,7 +364,14 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     if (!api) return;
 
     auto *library = page("Library");
-    auto *music = field(library, "Music folder");
+    auto *musicRow = new QHBoxLayout;
+    auto *music = new QLineEdit;
+    keyboard->watch(music);
+    auto *browse = new QPushButton("Browse…", this);
+    musicRow->addWidget(music, 1);
+    musicRow->addWidget(browse);
+    library->addRow("Music folder", musicRow);
+    connect(browse, &QPushButton::clicked, this, [=] { chooseMusicFolder(api, music, this); });
     auto *source = comboBox(library);
     source->addItem("USB / local folder", "local"); source->addItem("Internal library", "internal");
     library->addRow("Source", source);
@@ -307,10 +380,13 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         const auto settings = o["settings"].toObject(); music->setText(textValue(settings["music_directory"]));
         const int i = source->findData(textValue(settings["storage_source"])); if (i >= 0) source->setCurrentIndex(i);
     });
+    auto *libraryActions = new QHBoxLayout;
+    library->addRow(libraryActions);
     button(library, "Save source", [=] {
         api->post("/api/settings", {{"music_directory", music->text()}, {"storage_source", source->currentData().toString()}}, result, 90000);
-    });
-    button(library, "Rescan library", [=] { api->post("/api/library/rescan", {}, result); });
+    }, libraryActions);
+    button(library, "Rescan library", [=] { api->post("/api/library/rescan", {}, result); }, libraryActions);
+    libraryActions->addStretch();
     button(library, "Import browser data…", [=] {
         const auto path = QFileDialog::getOpenFileName(this, "Import PiTunes browser data", {}, "PiTunes browser data (*.json)");
         if (path.isEmpty()) return;
@@ -412,6 +488,8 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     button(network, "Refresh network status", refreshWifi);
     auto *networks = comboBox(network); network->addRow("Available networks", networks);
     connect(networks, QOverload<int>::of(&QComboBox::activated), this, [=](int) { ssid->setText(networks->currentText()); });
+    auto *wifiActions = new QHBoxLayout;
+    network->addRow(wifiActions);
     button(network, "Scan Wi-Fi", [=] {
         api->get("/api/network/wifi/scan", [guard, networks, result](QJsonObject o, QString error) {
             if (!guard) return;
@@ -419,11 +497,12 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
             if (!error.isEmpty()) return;
             networks->clear(); for (const auto &v : o["networks"].toArray()) networks->addItem(textValue(v.toObject()["ssid"]));
         }, 45000);
-    });
+    }, wifiActions);
     button(network, "Connect Wi-Fi", [=] {
         api->post("/api/network/wifi/connect", {{"ssid", ssid->text()}, {"password", password->text()}, {"country", country->text()}}, result);
         password->clear(); keyboard->hide();
-    });
+    }, wifiActions);
+    wifiActions->addStretch();
     button(network, "Start recovery hotspot", [=] { api->post("/api/network/hotspot/start", {}, result); });
     button(network, "Stop recovery hotspot", [=] { api->post("/api/network/hotspot/stop", {}, result); });
 

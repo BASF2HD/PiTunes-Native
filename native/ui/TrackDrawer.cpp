@@ -1,5 +1,7 @@
 #include "TrackDrawer.h"
 #include "PlayerIcons.h"
+#include "WheelList.h"
+#include <QLineEdit>
 #include "coverflow/CoverFlowWidget.h"
 #include <QApplication>
 #include <QFontDatabase>
@@ -33,9 +35,9 @@ QRect favouriteRect(const QRect &row) {
     return {row.right() + 1 - actionsWidth - durationWidth - favouriteWidth, row.top(), favouriteWidth, row.height()};
 }
 
-class TrackList : public QListView {
+class TrackList : public WheelList {
 public:
-    using QListView::QListView;
+    using WheelList::WheelList;
     std::function<void(int)> playRow;
     std::function<void(const QModelIndex &)> showRowActions;
     std::function<void(int)> favouriteRow;
@@ -43,14 +45,51 @@ public:
 
 protected:
     void mousePressEvent(QMouseEvent *event) override {
+        if (m_titleSelection) m_titleSelection->hide();
         m_pressIndex = indexAt(event->pos());
         m_pressPoint = event->pos();
         QListView::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if ((event->buttons() & Qt::LeftButton) && m_pressIndex.isValid() &&
+            ((m_titleSelection && m_titleSelection->isVisible()) ||
+             (event->pos() - m_pressPoint).manhattanLength() >= QApplication::startDragDistance())) {
+            const auto row = visualRect(m_pressIndex);
+            const int right = favouriteRect(row).left();
+            const int bottom = m_pressIndex.data(SubtitleRole).toString().isEmpty() ? row.bottom() : row.top() + 24;
+            const QRect title(QPoint(row.x() + numberWidth, row.top()), QPoint(right - 1, bottom));
+            if (title.contains(m_pressPoint)) {
+                if (!m_titleSelection) {
+                    m_titleSelection = new QLineEdit(viewport());
+                    m_titleSelection->setReadOnly(true);
+                    m_titleSelection->setAccessibleName("Song title");
+                    m_titleSelection->setStyleSheet("background: #202631; border: 0; padding: 0; color: white; font-size: 14px;");
+                    connect(verticalScrollBar(), &QScrollBar::valueChanged, m_titleSelection, &QLineEdit::hide);
+                }
+                if (!m_titleSelection->isVisible()) {
+                    m_titleSelection->setGeometry(title);
+                    m_titleSelection->setText(m_pressIndex.data().toString());
+                    m_pressCharacter = m_titleSelection->cursorPositionAt(m_pressPoint - title.topLeft());
+                    m_titleSelection->show();
+                    m_titleSelection->setFocus();
+                }
+                const int end = m_titleSelection->cursorPositionAt(event->pos() - title.topLeft());
+                m_titleSelection->setSelection(m_pressCharacter, end - m_pressCharacter);
+                event->accept();
+                return;
+            }
+        }
+        QListView::mouseMoveEvent(event);
     }
     void mouseReleaseEvent(QMouseEvent *event) override {
         const auto index = indexAt(event->pos());
         const bool clicked = index.isValid() && event->button() == Qt::LeftButton && index == m_pressIndex
             && (event->pos() - m_pressPoint).manhattanLength() < QApplication::startDragDistance();
+        if (m_titleSelection && m_titleSelection->isVisible()) {
+            m_pressIndex = {};
+            event->accept();
+            return;
+        }
         QListView::mouseReleaseEvent(event);
         if (!clicked) return;
         const QRect row = visualRect(index);
@@ -88,6 +127,8 @@ protected:
 private:
     QModelIndex m_pressIndex;
     QPoint m_pressPoint;
+    QLineEdit *m_titleSelection = nullptr;
+    int m_pressCharacter = 0;
 };
 
 QLabel *plainLabel(const QString &text, QWidget *parent) {
@@ -230,6 +271,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     heading->setSpacing(1);
     m_title = plainLabel(m_heading, this);
     m_title->setObjectName("drawerTitle");
+    m_title->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
     m_title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     m_title->setToolTip(m_heading);
     heading->addWidget(m_title);

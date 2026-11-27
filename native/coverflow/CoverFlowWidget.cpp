@@ -189,10 +189,10 @@ void CoverFlowWidget::setPlayback(const PlayerState &state) {
                 << (track.artist.isEmpty() ? QString("Unknown artist") : track.artist)
                 << (track.album.isEmpty() ? QString("Unknown album") : albumWithYear(track.album, track.year));
     }
-    const auto albumId = active ? state.track.albumId : QString();
-    if (caption == m_playingCaption && albumId == m_playingId) return;
+    if (caption == m_playingCaption && state.track.albumId == m_captionPlayback.track.albumId &&
+        state.track.file == m_captionPlayback.track.file && state.source == m_captionPlayback.source) return;
     m_playingCaption = caption;
-    m_playingId = albumId;
+    m_captionPlayback = state;
     updateCaption();
     update();
 }
@@ -201,7 +201,8 @@ void CoverFlowWidget::updateCaption() {
     const bool previousPlayback = m_captionShowsPlayback;
     m_captionRow = qRound(m_visualPosition);
     const auto *album = m_model->album(m_captionRow);
-    m_captionShowsPlayback = !m_playingCaption.isEmpty() && (!album || (!m_playingId.isEmpty() && album->id == m_playingId));
+    const auto *entry = m_model->entry(m_captionRow);
+    m_captionShowsPlayback = !m_playingCaption.isEmpty() && (!entry || entry->matchesPlayback(m_captionPlayback));
     QStringList caption;
     if (m_captionShowsPlayback) caption = m_playingCaption;
     else if (album) {
@@ -215,6 +216,8 @@ void CoverFlowWidget::updateCaption() {
         }
         caption << title;
         if (!subtitle.isEmpty()) caption << subtitle;
+        if (entry && entry->kind == CoverEntry::TrackCover && !entry->track.album.isEmpty())
+            caption << albumWithYear(entry->track.album, entry->track.year);
     }
     const bool textChanged = caption != m_caption;
     if (textChanged) {
@@ -318,7 +321,6 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
     const QPointF origin(width() / 2., top);
     struct Card {
         int row;
-        double depth;
         CoverQuads quads;
         const Artwork *art;
     };
@@ -331,14 +333,13 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
         auto quads = projectCover(pose, size, origin);
         if (!quads.face.boundingRect().intersects(QRectF(rect())) &&
             !quads.reflection.boundingRect().intersects(QRectF(rect()))) return;
-        cards.append({row, pose.depth, std::move(quads), m_artwork->find(album->artUrl)});
+        cards.append({row, std::move(quads), m_artwork->find(album->artUrl)});
     };
     for (int row = first; row <= last; ++row) addCard(row);
     for (auto it = m_startPoses.cbegin(); it != m_startPoses.cend(); ++it) {
         if (it.key() < first || it.key() > last) addCard(it.key());
     }
     std::sort(cards.begin(), cards.end(), [this](const Card &a, const Card &b) {
-        if (a.depth != b.depth) return a.depth > b.depth;
         const auto distanceA = std::abs(a.row - m_visualPosition);
         const auto distanceB = std::abs(b.row - m_visualPosition);
         if (distanceA != distanceB) return distanceA > distanceB;
@@ -399,9 +400,24 @@ void CoverFlowWidget::mouseReleaseEvent(QMouseEvent *e) {
     if (m_dragging) select(m_target + (e->localPos().x() < m_press.x() ? 1 : -1));
     else for (auto it = m_hits.crbegin(); it != m_hits.crend(); ++it) {
         if (!it->second.containsPoint(e->localPos(), Qt::OddEvenFill)) continue;
-        if (it->first == m_target) emit activated(m_target); else select(it->first);
+        if (it->first != m_target) select(it->first);
+        else if (const auto *entry = m_model->entry(m_target); entry && entry->kind != CoverEntry::StationCover)
+            emit activated(m_target);
         break;
     }
+}
+void CoverFlowWidget::mouseDoubleClickEvent(QMouseEvent *e) {
+    if (e->button() != Qt::LeftButton) return;
+    for (auto it = m_hits.crbegin(); it != m_hits.crend(); ++it) {
+        if (!it->second.containsPoint(e->localPos(), Qt::OddEvenFill)) continue;
+        const auto *entry = m_model->entry(it->first);
+        if (entry && entry->kind == CoverEntry::StationCover) {
+            select(it->first);
+            emit activated(it->first);
+        }
+        break;
+    }
+    e->accept();
 }
 bool CoverFlowWidget::event(QEvent *e) {
     if (e->type() == QEvent::TouchBegin || e->type() == QEvent::TouchEnd || e->type() == QEvent::TouchUpdate) {

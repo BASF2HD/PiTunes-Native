@@ -81,10 +81,11 @@ except ImportError:
     audio_devices_payload = None  # type: ignore
     normalize_route = None  # type: ignore
 try:
-    from playback import clear_continuous_playback, play_queue_fast, start_mpd_idle_watcher
+    from playback import clear_continuous_playback, next_track_or_album, play_queue_fast, start_mpd_idle_watcher
 except ImportError:
     clear_continuous_playback = None  # type: ignore
     play_queue_fast = None  # type: ignore
+    next_track_or_album = None  # type: ignore
     start_mpd_idle_watcher = None  # type: ignore
 
 def ensure_dirs():
@@ -1660,6 +1661,7 @@ def play_queue(body):
             entry_id=str(body.get("entryId") or body.get("albumId") or body.get("album") or ""),
             continuous=bool(continuous),
             listen_port=LISTEN_PORT,
+            browse_context=body["browseContext"] if isinstance(body.get("browseContext"), dict) else None,
         )
         return api_status()
 
@@ -1862,14 +1864,13 @@ def compat_player_post(path, body):
         mpd.command("stop")
         return compat_player_state()
     if path == "/api/player/previous":
-        if clear_continuous_playback:
-            clear_continuous_playback()
         mpd.command("previous")
         return compat_player_state()
     if path == "/api/player/next":
-        if clear_continuous_playback:
-            clear_continuous_playback()
-        mpd.command("next")
+        if next_track_or_album:
+            next_track_or_album(listen_port=LISTEN_PORT)
+        else:
+            mpd.command("next")
         return compat_player_state()
     if path == "/api/player/options":
         commands = mode_commands(body)
@@ -2017,7 +2018,7 @@ class Handler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/library/tracks":
                 offset = int(query.get("offset", [0])[0])
                 limit = int(query.get("limit", [10000])[0])
-                self.send_json(lib_queries.list_all_tracks(offset, limit) if use_library() else {"tracks": [], "total": 0})
+                self.send_json(lib_queries.list_all_tracks(offset, limit, first_value(query.get("sort"))) if use_library() else {"tracks": [], "total": 0})
             elif parsed.path == "/api/library/favourites":
                 self.send_json(compat_favourites())
             elif parsed.path == "/api/library/starred/tracks":
