@@ -102,8 +102,10 @@ quickly. The final blue cover enters at about 56.13 s. Its main turn slows past
 56.73 s before the next gesture. Native CoverFlow now tracks fractional deltas
 and momentum on a frame timer that incoming packets cannot postpone. The centre
 cover stays compact at speed and carries velocity into a slower final settle.
+The release response increases for a steep approach so that the tested fast
+gesture lands without reversing across the centre.
 In an offscreen 1280×680 Mac playback of synthetic trackpad packets at 2× scale,
-the median time to paint and grab a frame decreased from 21.1 ms to 8.7 ms after
+the median time to paint and grab a frame decreased from 21.1 ms to about 9 ms after
 using a logical-resolution projection during motion. This measurement includes
 the capture operation. Trackpad feel and appliance frame rate remain to be
 verified on physical inputs.

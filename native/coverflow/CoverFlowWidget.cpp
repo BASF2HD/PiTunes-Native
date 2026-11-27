@@ -45,7 +45,13 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     m_trackpadIdle.setSingleShot(true);
     connect(&m_trackpadIdle, &QTimer::timeout, this, [this] {
         m_trackpadActive = false;
-        moveTo(qRound(m_goal), true, 10.);
+        if (m_timer.isActive()) sampleMotion();
+        const int landing = qRound(m_goal);
+        const double remaining = landing - m_motion.position;
+        // Increase damping when a fast approach would carry the cover past
+        // its landing. Keep both position and velocity continuous at release.
+        const double approach = remaining == 0. ? 0. : m_motion.velocity / remaining;
+        moveTo(landing, true, qBound(10., approach, 24.));
     });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
         m_trackpadIdle.stop();
