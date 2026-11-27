@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# Native-only compatibility entry point.
-set -euo pipefail
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pitunes-native-session.sh" "$@"
+# Retired compatibility entry point. LightDM is the sole session owner.
+printf '%s\n' "PiTunes Native starts through its LightDM session." >&2
+exit 1

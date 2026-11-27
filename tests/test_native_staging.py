@@ -1,6 +1,7 @@
 """Exercise actual native staging/patch application for all four targets on a host."""
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("native_staging", ROOT / "tools/prepare-native-source.py")
 staging = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(staging)
+
+audit_spec = importlib.util.spec_from_file_location("native_rootfs_audit", ROOT / "scripts/audit-native-rootfs.py")
+audit = importlib.util.module_from_spec(audit_spec)
+audit_spec.loader.exec_module(audit)
 
 
 class NativeStagingTest(unittest.TestCase):
@@ -28,7 +33,17 @@ class NativeStagingTest(unittest.TestCase):
                 with self.subTest(arch=arch):
                     output = Path(directory) / arch
                     staging.prepare(output, arch)
-                    setup = (output / "scripts/setup-kiosk.sh").read_text()
+                    wrapper = (output / "scripts/setup-kiosk.sh").read_text()
+                    self.assertIn("setup-native-kiosk.sh", wrapper)
+                    setup = (output / "scripts/setup-native-kiosk.sh").read_text()
+                    self.assertIn("ln -sfn /dev/null /etc/systemd/system/pitunes-display.service",
+                                  (output / "install.sh").read_text())
+                    for name in ("pitunes-samba-late.service", "pitunes-startup-scan.service", "pitunes-hotspot.service"):
+                        self.assertNotIn("pitunes-display.service", (output / "systemd" / name).read_text())
+                    for name in ("pitunes-display.sh", "pitunes-kiosk-launch.sh"):
+                        retired = subprocess.run(["bash", str(output / "scripts" / name)], capture_output=True, text=True)
+                        self.assertEqual(retired.returncode, 1)
+                        self.assertIn("starts through its LightDM session", retired.stderr)
                     self.assertNotIn("chromium", setup.lower())
                     self.assertIn("pitunes-native.desktop", setup)
                     self.assertIn("install-native-app.sh", (output / "install.sh").read_text())
@@ -48,6 +63,39 @@ class NativeStagingTest(unittest.TestCase):
                         self.assertIn('raspios-bookworm', (output / "image/build.env").read_text())
                     self.assertFalse((output / ".git").exists())
                     self.assertFalse((output / "image/work").exists())
+
+    def test_rootfs_audit_rejects_installed_webengine_and_legacy_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                "var/lib/dpkg/status": "".join(
+                    f"Package: {name}\nStatus: install ok installed\nVersion: 1\nArchitecture: i386\n\n"
+                    for name in ("pitunes-native", "mpd", "nginx")
+                ) + "Package: chromium\nStatus: deinstall ok config-files\nVersion: 1\n",
+                "usr/bin/pitunes-native": "",
+                "etc/nginx/sites-available/pitunes.conf":
+                    "root /opt/pitunes/frontend;\nproxy_pass http://127.0.0.1:8080;\n",
+                "opt/pitunes/frontend/index.html": "",
+                "opt/pitunes/frontend/assets/app.js": "",
+                "opt/pitunes/frontend/assets/styles.css": "",
+            }
+            for path, content in files.items():
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            units = root / "etc/systemd/system"
+            units.mkdir(parents=True)
+            (units / "pitunes-display.service").symlink_to("/dev/null")
+            report, _ = audit.inspect(root, graphical=False)
+            self.assertFalse(report["violations"])
+
+            with (root / "var/lib/dpkg/status").open("a") as manifest:
+                manifest.write("\nPackage: qml6-module-qtwebengine\nStatus: install ok installed\nVersion: 1\n")
+            (units / "pitunes-samba-late.service").write_text("Wants=pitunes-display.service\n")
+            report, _ = audit.inspect(root, graphical=False)
+            self.assertEqual(report["forbiddenPackages"], ["qml6-module-qtwebengine"])
+            self.assertTrue(report["unexpectedUnitReferences"])
+            self.assertEqual(len(report["violations"]), 2)
 
     def test_refuses_existing_or_source_destination(self):
         with self.assertRaises(ValueError):

@@ -27,7 +27,7 @@ mkdir -p "${REPORT_DIR}"
   systemctl list-unit-files --type=service --state=enabled 2>/dev/null | grep -E 'pitunes|mpd|nginx|lightdm|plymouth|bluetooth|shairport|avahi|smbd' || true
   echo
   echo "=== active blocking dependencies (display path) ==="
-  systemctl show pitunes-display.service -p After -p Wants -p Requires -p ActiveState -p SubState 2>/dev/null || true
+  systemctl show lightdm.service -p After -p Wants -p Requires -p ActiveState -p SubState 2>/dev/null || true
   systemctl show pitunes-api.service -p After -p Wants -p Requires -p ActiveState -p SubState 2>/dev/null || true
   systemctl show pitunes-hotspot.service -p After -p Before -p ActiveState -p SubState 2>/dev/null || true
   echo

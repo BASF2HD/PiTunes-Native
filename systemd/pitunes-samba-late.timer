@@ -1,5 +1,5 @@
 [Unit]
-Description=Defer Samba until after CoverFlow UI
+Description=Defer Samba until late boot
 
 [Timer]
 OnBootSec=10s

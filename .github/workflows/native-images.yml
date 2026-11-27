@@ -32,6 +32,9 @@ jobs:
             image/out/pitunes-native-*.img.xz
             image/out/pitunes-native-*.img.xz.sha256
             image/out/pitunes-native-*.img.build.txt
+            image/out/pitunes-native-*.packages.tsv
+            image/out/pitunes-native-*.linked-libs.txt
+            image/out/pitunes-native-*.rootfs-audit.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

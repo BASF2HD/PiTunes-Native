@@ -1,7 +1,5 @@
 [Unit]
-Description=Start Samba after kiosk UI is up
-After=pitunes-display.service
-Wants=pitunes-display.service
+Description=Start Samba after boot delay
 
 [Service]
 Type=oneshot

@@ -6,7 +6,6 @@ launch ownership. Requires an absent destination and refuses non-native identity
 """
 import argparse
 import json
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -59,29 +58,10 @@ def prepare(destination: Path, arch: str):
         shutil.copy2(source, target)
     (destination / "config/.native-stage").write_text(arch + "\n")
     if arch in ("i386", "amd64"):
-        # Preserve proven PC ALSA/mount/recovery adaptations. Browser-specific hunks
-        # are intentionally excluded, rather than installing then removing Chromium.
-        patch = (ROOT / "image/pc/runtime.patch").read_text()
-        sections = re.split(r"(?=^diff --git )", patch, flags=re.MULTILINE)
-        patch = "".join(s for s in sections if not s.startswith((
-            "diff --git a/scripts/setup-kiosk.sh ", "diff --git a/scripts/pitunes-kiosk-launch.sh ")))
+        # The active patch contains only PC backend, ALSA, remote web and boot adaptations.
         subprocess.run(["patch", "--batch", "--forward", "--fuzz=0", "-d", str(destination), "-p1"],
-                       input=patch, text=True, check=True, capture_output=True)
-        builder = destination / "tools/build-pc-image.sh"
-        replace_once(builder,
-                     'for patch_file in runtime.patch render-on-demand.patch kiosk-readiness.patch; do\n'
-                     '  patch --batch --forward --fuzz=0 -d "${SOURCE}" -p1 <"${ROOT}/image/pc/${patch_file}"\ndone',
-                     '# Native preparation already applied reviewed non-browser PC adaptations.')
-        replace_once(builder,
-                     '{backend,config,frontend,nginx,scripts,systemd,install.sh,configure-mpd.sh}',
-                     '{backend,config,frontend,nginx,scripts,systemd,native,CMakeLists.txt,install.sh,configure-mpd.sh}')
-        replace_once(builder, '${ROOT}/image/out/pitunes-${ARCH}.img',
-                     '${ROOT}/image/out/pitunes-native-${ARCH}.img')
-    # These compatibility entry points now delegate only to the native session.
-    shutil.copy2(ROOT / "scripts/setup-native-kiosk.sh", destination / "scripts/setup-kiosk.sh")
-    for name in ("pitunes-display.sh", "pitunes-kiosk-launch.sh"):
-        (destination / "scripts" / name).write_text(
-            '#!/usr/bin/env bash\nset -euo pipefail\nexec /opt/pitunes/scripts/pitunes-native-session.sh\n')
+                       input=(ROOT / "image/pc/runtime.patch").read_text(),
+                       text=True, check=True, capture_output=True)
     installer = destination / "install.sh"
     replace_once(installer, 'echo "Creating service user and directories..."',
                  '"${SCRIPT_DIR}/scripts/install-native-app.sh" "${SCRIPT_DIR}"\n\n'

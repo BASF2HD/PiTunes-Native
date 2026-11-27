@@ -33,7 +33,7 @@ case "${ARCH}" in
     ;;
   *) echo "Unsupported PC architecture: ${ARCH}" >&2; exit 2 ;;
 esac
-OUTPUT="${OUTPUT:-${ROOT}/image/out/pitunes-${ARCH}.img}"
+OUTPUT="${OUTPUT:-${ROOT}/image/out/pitunes-native-${ARCH}.img}"
 [[ "${OUTPUT}" = *.img ]] || { echo "Output filename must end in .img." >&2; exit 2; }
 if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ] || [ "$(id -u)" != "0" ]; then
   echo "Run as root on x86_64 Linux (a VM is supported)." >&2
@@ -126,10 +126,7 @@ run apt-get install -y --no-install-recommends "${KERNEL}" initramfs-tools e2fsp
 
 SOURCE="${TARGET}/tmp/pitunes-src"
 mkdir "${SOURCE}"
-rsync -a --exclude='__pycache__' "${ROOT}"/{backend,config,frontend,nginx,scripts,systemd,install.sh,configure-mpd.sh} "${SOURCE}/"
-for patch_file in runtime.patch render-on-demand.patch kiosk-readiness.patch; do
-  patch --batch --forward --fuzz=0 -d "${SOURCE}" -p1 <"${ROOT}/image/pc/${patch_file}"
-done
+rsync -a --exclude='__pycache__' "${ROOT}"/{backend,config,frontend,nginx,scripts,systemd,native,CMakeLists.txt,install.sh,configure-mpd.sh} "${SOURCE}/"
 COMMIT="${PITUNES_INSTALL_COMMIT:-$(git -C "${ROOT}" rev-parse HEAD 2>/dev/null || true)}"
 run env PITUNES_IMAGE_BUILD=1 PITUNES_INSTALL_COMMIT="${COMMIT}" /tmp/pitunes-src/install.sh
 
@@ -163,6 +160,9 @@ test -s "${TARGET}/boot/grub/grub.cfg"
 [ "$(readlink "${TARGET}/etc/systemd/system/pitunes-update.service")" = /dev/null ]
 run nginx -t
 run /opt/pitunes/scripts/golden-image-cleanup.sh
+python3 "${ROOT}/scripts/audit-native-rootfs.py" --root "${TARGET}" --output "$(dirname "${OUTPUT}")" \
+  --prefix "pitunes-native-${ARCH}"
+cp "${TARGET}/opt/pitunes/config/native-linked-libs.txt" "${OUTPUT%.img}.linked-libs.txt"
 ln -sf /etc/machine-id "${TARGET}/var/lib/dbus/machine-id"
 rm -f "${TARGET}/usr/sbin/policy-rc.d"
 sync

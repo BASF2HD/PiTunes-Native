@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kiosk boot: clean dark screen, no firmware colour flash; PiTunes logo only inside Chromium.
+# Kiosk boot: clean dark screen, no firmware colour flash; local display handled by LightDM.
 set -euo pipefail
 
 BOOT_DIR="${PITUNES_BOOT_DIR:-}"
@@ -107,4 +107,4 @@ user-background=false
 hide-user-image=true
 EOF
 
-echo "Kiosk boot configured: no firmware colour flash, dark screen until Chromium splash."
+echo "Kiosk boot configured: no firmware colour flash, dark screen until the native session."

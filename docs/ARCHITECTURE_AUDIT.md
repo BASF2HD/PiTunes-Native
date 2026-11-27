@@ -1,5 +1,7 @@
 # Original architecture audit and native boundary
 
+See [Local graphics and browser runtime audit](NATIVE_BROWSER_AUDIT.md) for current native image, dependency and boot evidence.
+
 Audit date: 26 November 2026. Reference: original PiTunes
 `dd34c4635a523b8dabc40e976f2d7b11abf88885`. All 174 tracked files were compared
 with live GitHub blobs; source inventory SHA-256 is in `docs/inheritance/`.

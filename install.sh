@@ -188,7 +188,9 @@ install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-bt-agent.service" /etc/systemd/sy
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-bluealsa-aplay.service" /etc/systemd/system/pitunes-bluealsa-aplay.service
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-startup-scan.service" /etc/systemd/system/pitunes-startup-scan.service
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-hotspot.service" /etc/systemd/system/pitunes-hotspot.service
-install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-display.service" /etc/systemd/system/pitunes-display.service
+# Remove any inherited enablement and prevent dependency or manual activation.
+systemctl disable --now pitunes-display.service 2>/dev/null || true
+ln -sfn /dev/null /etc/systemd/system/pitunes-display.service
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-update.service" /etc/systemd/system/pitunes-update.service
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-system-update.service" /etc/systemd/system/pitunes-system-update.service
 install -m 0644 "${SCRIPT_DIR}/systemd/pitunes-system-boot-check.service" /etc/systemd/system/pitunes-system-boot-check.service
@@ -243,7 +245,7 @@ done
 for unit in \
   NetworkManager.service ssh.service bluetooth.service bluealsa.service \
   shairport-sync.service avahi-daemon.service pitunes-api.service \
-  smbd.service pitunes-display.service \
+  smbd.service \
   pitunes-update.service \
   pitunes-system-update.service pitunes-system-boot-check.service \
   pitunes-hotspot.service pitunes-firstboot.service \
@@ -285,7 +287,6 @@ else
 fi
 systemctl disable pitunes-fb-splash.service 2>/dev/null || true
 systemctl mask pitunes-fb-splash.service 2>/dev/null || true
-systemctl disable pitunes-display.service 2>/dev/null || true
 
 if [ "${IMAGE_BUILD}" = "1" ]; then
   echo "Image build mode: services enabled but not started in chroot."
@@ -300,7 +301,6 @@ else
   systemctl restart pitunes-api.service
   nginx -t
   systemctl restart nginx
-  systemctl stop pitunes-display.service 2>/dev/null || true
   systemctl start pitunes-startup-scan.service || true
   systemctl start pitunes-hotspot.service || true
 fi

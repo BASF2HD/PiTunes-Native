@@ -1,7 +1,7 @@
 [Unit]
 Description=PiTunes WiFi hotspot when no network
 Wants=NetworkManager.service
-After=NetworkManager.service pitunes-display.service
+After=NetworkManager.service
 Conflicts=shutdown.target
 DefaultDependencies=yes
 

@@ -339,6 +339,13 @@ cat >"${WORK_DIR}/root/etc/pitunes-image.json" <<EOF
 }
 EOF
 rm -f "${WORK_DIR}/root/usr/bin/${QEMU_BIN}"
+audit_options=()
+if [ "${ENABLE_KIOSK}" != "1" ]; then audit_options+=(--headless); fi
+python3 "${ROOT_DIR}/scripts/audit-native-rootfs.py" --root "${WORK_DIR}/root" --output "$(dirname "${OUTPUT}")" \
+  --prefix "pitunes-native-${ARCH}" "${audit_options[@]}"
+if [ "${ENABLE_KIOSK}" = "1" ]; then
+  cp "${WORK_DIR}/root/opt/pitunes/config/native-linked-libs.txt" "${OUTPUT%.img}.linked-libs.txt"
+fi
 
 umount "${WORK_DIR}/root/tmp/pitunes-src" 2>/dev/null || true
 umount "${WORK_DIR}/root/dev/pts"
@@ -389,9 +396,5 @@ Flash with Raspberry Pi Imager (Use custom) or:
 Boot the Pi, then open:
 
   http://pitunes.local
-
-Publish to GitHub Releases:
-
-  ./tools/publish-image-release.sh v${PITUNES_IMAGE_VERSION} ${OUTPUT}.xz
 
 EOF

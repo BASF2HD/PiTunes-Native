@@ -30,8 +30,7 @@ greeter-hide-users=true
 xserver-command=X -s 0 -dpms
 EOF
 install -m 0644 /opt/pitunes/systemd/pitunes-native.service /etc/systemd/user/pitunes-native.service
-# The old service is a reference only; there must be exactly one local UI owner.
-systemctl disable pitunes-display.service 2>/dev/null || true
+test "$(readlink /etc/systemd/system/pitunes-display.service)" = /dev/null
 systemctl enable lightdm
 systemctl set-default graphical.target
 "/opt/pitunes/scripts/verify-native-install.sh"

@@ -8,11 +8,74 @@ import argparse
 import importlib.util
 import json
 import tempfile
+import urllib.request
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("original_pc_smoke", Path(__file__).with_name("test-pc-image.py"))
 reference = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reference)
+
+
+def instrumented_disk(work, image):
+    disk = work / "native-process-inspection.img"
+    reference.run("cp", "--sparse=always", "--reflink=auto", image, disk)
+    root = work / "probe-root"
+    root.mkdir()
+    unit = work / "native-boot-probe.service"
+    unit.write_text(
+        "[Unit]\nDescription=Record the native session in disposable QEMU tests\nAfter=lightdm.service\n"
+        "[Service]\nType=oneshot\nExecStart=/usr/bin/python3 /var/tmp/native-boot-probe.py\n"
+        "[Install]\nWantedBy=graphical.target\n",
+        encoding="ascii",
+    )
+    loop = reference.run("sudo", "losetup", "--find", "--show", "--partscan", disk,
+                         capture_output=True, text=True).stdout.strip()
+    try:
+        reference.run("sudo", "udevadm", "settle")
+        reference.run("sudo", "mount", f"{loop}p2", root)
+        try:
+            reference.run("sudo", "install", "-m", "0644", Path(__file__).with_name("native-boot-probe.py"),
+                          root / "var/tmp/native-boot-probe.py")
+            reference.run("sudo", "install", "-m", "0644", unit, root / "etc/systemd/system" / unit.name)
+            reference.run("sudo", "systemctl", "--root", root, "enable", unit.name)
+        finally:
+            reference.run("sudo", "umount", root)
+    finally:
+        reference.run("sudo", "losetup", "-d", loop)
+    return disk
+
+
+def verify_processes(guest, evidence):
+    serial = evidence / (guest.name + ".serial.log")
+    marker = "PITUNES_BOOT_AUDIT "
+
+    def read_report():
+        for line in serial.read_text(errors="replace").splitlines():
+            if marker in line:
+                try:
+                    return json.loads(line.split(marker, 1)[1]) or False
+                except json.JSONDecodeError:
+                    continue
+        return False
+
+    report = reference.wait_for("native session process observations", read_report, timeout=135)
+    (evidence / (guest.name + ".processes.json")).write_text(json.dumps(report, indent=2) + "\n")
+    assert len(report) == 5, report
+    for sample in report:
+        assert sample["legacyDisplayMasked"] and not sample["browserProcesses"], sample
+        assert sample["windowManagers"] == 1 and len(sample["players"]) == 1, sample
+        player = sample["players"][0]
+        assert player["uid"] > 0 and player["fullscreen"], player
+    assert len({sample["players"][0]["pid"] for sample in report}) == 1, report
+
+
+def verify_remote_frontend(guest):
+    for path, expected_type in (("/", "text/html"), ("/assets/app.js", "application/javascript"),
+                                ("/assets/styles.css", "text/css")):
+        with urllib.request.urlopen(f"http://127.0.0.1:{guest.port}{path}", timeout=10) as response:
+            actual_type = response.headers.get_content_type()
+            assert actual_type == expected_type or (path.endswith(".js") and actual_type == "text/javascript"), actual_type
+            assert response.read(256).strip(), path
 
 
 def main():
@@ -25,13 +88,17 @@ def main():
     evidence = args.evidence.resolve(); evidence.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="native-pc-smoke-") as temporary:
         work = Path(temporary); music = reference.music_disk(work)
-        with reference.Guest(args.arch, work, image, music, evidence, "native-bios-offline", memory_mib=1024) as guest:
+        observed = instrumented_disk(work, image)
+        with reference.Guest(args.arch, work, observed, music, evidence, "native-bios-offline", memory_mib=1024) as guest:
             reference.wait_for("native GUI showing USB album without a NIC (1 GiB guest)", guest.offline_track_visible, timeout=420)
-        with reference.Guest(args.arch, work, image, music, evidence, "native-uefi", uefi=True, lan=True, memory_mib=1024) as guest:
+            verify_processes(guest, evidence)
+        with reference.Guest(args.arch, work, observed, music, evidence, "native-uefi", uefi=True, lan=True, memory_mib=1024) as guest:
             reference.verify_uefi(guest)
             reference.wait_for("native GUI with UEFI", guest.offline_track_visible, timeout=180)
             status = guest.api("system/update/status")
             assert status.get("supported") is False and status.get("repository") == "BASF2HD/PiTunes-Native", status
+            verify_processes(guest, evidence)
+            verify_remote_frontend(guest)
         fault = reference.display_fault_disk(work, image)
         with reference.Guest(args.arch, work, fault, music, evidence, "native-display-fault", uefi=True,
                              lan=True, memory_mib=1024, save_overlay=True) as guest:
@@ -56,6 +123,8 @@ def main():
         "measurementKind": "virtual machine smoke test", "architecture": args.arch,
         "memoryMiB": 1024, "biosOfflineNativeGui": True, "uefiGuiAndSilentWavPlayback": True,
         "mpdPlaybackWithDisplayFailure": True, "physicalHardware": False,
+        "singleNativePlayerAfterLateBoot": True, "browserProcessesObserved": False, "legacyDisplayMasked": True,
+        "remoteHtmlJsCssServedByNginx": True,
         "boundedDisplayFailure": True, "fatDiagnosticReport": True,
         "performanceAcceptance": "not measured", "audioQuality": "not measured",
     }, indent=2) + "\n")

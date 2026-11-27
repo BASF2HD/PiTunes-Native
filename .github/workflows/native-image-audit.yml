@@ -1,0 +1,50 @@
+name: Inspect existing native image root filesystems
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: JSON list of objects with arch and run fields
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    if: github.repository == 'BASF2HD/PiTunes-Native'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.images) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.run }}
+          pattern: pitunes-native-${{ matrix.arch }}-development-*
+          path: image/out
+          merge-multiple: true
+      - name: Verify and inspect the image read-only
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          case "${ARCH}" in i386|amd64|armhf|arm64) ;; *) exit 2 ;; esac
+          image="pitunes-native-${ARCH}.img"
+          (cd image/out && sha256sum -c "${image}.xz.sha256")
+          xz -dk "image/out/${image}.xz"
+          mount_dir=$(mktemp -d)
+          loop=$(sudo losetup --find --show --read-only --partscan "image/out/${image}")
+          trap 'mountpoint -q "${mount_dir}" && sudo umount "${mount_dir}"; sudo losetup -d "${loop}"; rmdir "${mount_dir}"' EXIT
+          sudo udevadm settle
+          sudo mount -t ext4 -o ro,noload "${loop}p2" "${mount_dir}"
+          sudo python3 scripts/audit-native-rootfs.py --root "${mount_dir}" \
+            --output "${PWD}/evidence" --prefix "pitunes-native-${ARCH}" --report-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitunes-native-${{ matrix.arch }}-rootfs-evidence-${{ matrix.run }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 14
