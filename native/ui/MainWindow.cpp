@@ -40,9 +40,34 @@ QString albumTracksPath(const QString &id) {
     return "/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decoded)) + "/tracks";
 }
 
-class AlbumStrip : public QSlider {
+class PositionSlider : public QSlider {
 public:
-    explicit AlbumStrip(QWidget *parent) : QSlider(Qt::Horizontal, parent) {}
+    explicit PositionSlider(QWidget *parent) : QSlider(Qt::Horizontal, parent) {}
+    std::function<void()> grooveClicked;
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override {
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        const auto handle = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        if (event->button() == Qt::LeftButton && !handle.contains(event->pos())) {
+            const auto groove = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
+            const int span = groove.width() - handle.width();
+            if (span > 0) {
+                const int position = qBound(0, event->x() - groove.left() - handle.width() / 2, span);
+                setValue(QStyle::sliderValueFromPosition(minimum(), maximum(), position, span, option.upsideDown));
+                event->accept();
+                if (grooveClicked) grooveClicked();
+                return;
+            }
+        }
+        QSlider::mousePressEvent(event);
+    }
+};
+
+class AlbumStrip : public PositionSlider {
+public:
+    using PositionSlider::PositionSlider;
 
 protected:
     void resizeEvent(QResizeEvent *event) override {
@@ -57,23 +82,6 @@ protected:
             "QSlider::handle:horizontal { width: %1px; margin: 0; border: 1px solid rgba(225,232,245,145); "
             "border-radius: 6px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
             "stop:0 #5b5f65,stop:0.23 #222429,stop:0.56 #07080a,stop:1 #181a1f); }").arg(width));
-    }
-
-    void mousePressEvent(QMouseEvent *event) override {
-        QStyleOptionSlider option;
-        initStyleOption(&option);
-        const auto handle = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
-        if (event->button() == Qt::LeftButton && !handle.contains(event->pos())) {
-            const auto groove = style()->subControlRect(QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
-            const int span = groove.width() - handle.width();
-            if (span > 0) {
-                const int position = qBound(0, event->x() - groove.left() - handle.width() / 2, span);
-                setValue(QStyle::sliderValueFromPosition(minimum(), maximum(), position, span, option.upsideDown));
-                event->accept();
-                return;
-            }
-        }
-        QSlider::mousePressEvent(event);
     }
 
 private:
@@ -126,6 +134,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     header->setContentsMargins(0, 0, 0, 0);
     header->setSpacing(9);
     layout->addLayout(header);
+    header->addStretch(1);
     m_repeat = iconButton(PlayerIcon::Repeat, "Repeat off");
     m_repeat->setIcon(playerIcon(PlayerIcon::Repeat, false));
     header->addWidget(m_repeat);
@@ -137,15 +146,18 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_time->setMinimumWidth(81);
     m_time->setAccessibleName("Playback time");
     header->addWidget(m_time);
-    m_seek = new QSlider(Qt::Horizontal, root);
+    auto *seek = new PositionSlider(root);
+    m_seek = seek;
     m_seek->setAccessibleName("Playback position");
     m_seek->setMinimumHeight(26);
+    m_seek->setMaximumWidth(720);
     m_seek->setEnabled(false);
     m_seek->setStyleSheet(
         "QSlider::groove:horizontal { height: 5px; background: #32343b; border-radius: 2px; }"
         "QSlider::sub-page:horizontal { background: #a9adba; border-radius: 2px; }"
         "QSlider::handle:horizontal { width: 15px; margin: -5px 0; border-radius: 7px; background: white; }");
-    header->addWidget(m_seek, 1);
+    header->addWidget(m_seek, 4);
+    seek->grooveClicked = [this] { command("/api/player/seek", {{"seconds", m_seek->value()}}); };
     auto *searchToggle = iconButton(PlayerIcon::Search, "Open search");
     searchToggle->setObjectName("roundControl");
     searchToggle->setCheckable(true);
@@ -154,7 +166,13 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_volumeButton->setObjectName("roundControl");
     auto *volumeMenu = new FrostedMenu(m_flow, m_volumeButton);
     auto *volumeAction = new QWidgetAction(volumeMenu);
-    m_volume = new QSlider(Qt::Vertical, volumeMenu);
+    auto *volumePanel = new QWidget(volumeMenu);
+    volumePanel->setObjectName("volumePanel");
+    volumePanel->setStyleSheet("QWidget#volumePanel { background: transparent; }");
+    auto *volumeLayout = new QVBoxLayout(volumePanel);
+    volumeLayout->setContentsMargins(4, 4, 4, 5);
+    volumeLayout->setSpacing(3);
+    m_volume = new QSlider(Qt::Vertical, volumePanel);
     m_volume->setRange(0, 100);
     m_volume->setFixedSize(36, 112);
     m_volume->setAccessibleName("Volume level");
@@ -162,7 +180,14 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         "QSlider { background: transparent; }"
         "QSlider::groove:vertical { width: 4px; background: #393c48; border-radius: 2px; }"
         "QSlider::handle:vertical { height: 14px; margin: 0 -5px; border-radius: 7px; background: #ecedf5; }");
-    volumeAction->setDefaultWidget(m_volume);
+    volumeLayout->addWidget(m_volume, 0, Qt::AlignHCenter);
+    m_mute = iconButton(PlayerIcon::Volume, "Mute");
+    m_mute->setObjectName("roundControl");
+    volumeLayout->addWidget(m_mute, 0, Qt::AlignHCenter);
+    connect(m_mute, &QToolButton::clicked, this, [this] {
+        command("/api/player/volume", {{"volume", m_player.volume > 0 ? 0 : m_volumeBeforeMute}});
+    });
+    volumeAction->setDefaultWidget(volumePanel);
     volumeMenu->addAction(volumeAction);
     m_volumeButton->setMenu(volumeMenu);
     m_volumeButton->setPopupMode(QToolButton::InstantPopup);
@@ -171,6 +196,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_shuffle->setIcon(playerIcon(PlayerIcon::Shuffle, false));
     m_shuffle->setCheckable(true);
     header->addWidget(m_shuffle);
+    header->addStretch(1);
     connect(m_shuffle, &QToolButton::clicked, this, [this] {
         command("/api/player/options", {{"shuffle", !m_player.shuffle}});
     });
@@ -664,7 +690,13 @@ void MainWindow::refreshPlayer() {
         m_seek->setEnabled(m_player.duration > 0);
         if (!m_volume->isSliderDown()) m_volume->setValue(qMax(0, m_player.volume));
         m_volumeButton->setEnabled(m_player.volume >= 0);
-        m_volumeButton->setIcon(playerIcon(m_player.volume > 0 ? PlayerIcon::Volume : PlayerIcon::Mute));
+        const bool muted = m_player.volume == 0;
+        if (m_player.volume > 0) m_volumeBeforeMute = m_player.volume;
+        const auto volumeIcon = playerIcon(m_player.volume > 0 ? PlayerIcon::Volume : PlayerIcon::Mute);
+        m_volumeButton->setIcon(volumeIcon);
+        m_mute->setIcon(volumeIcon);
+        m_mute->setAccessibleName(muted ? "Unmute" : "Mute");
+        m_mute->setToolTip(m_mute->accessibleName());
         m_time->setText(timeLabel(m_player.elapsed) + " / " + (m_player.duration > 0 ? timeLabel(m_player.duration) : "--:--"));
         m_flow->setPlayback(m_player);
         focusInitialPlaybackAlbum();

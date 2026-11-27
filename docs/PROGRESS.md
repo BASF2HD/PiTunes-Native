@@ -198,6 +198,24 @@ tab and that playback time advanced. Audible output remains unverified.
 All 33 native cases passed in Debug and Release with Qt 5.15.19, including
 the compact footer, settings drag and close, and caption favourite rollback.
 
+Restored the 36-degree stack proportions and face/reflection projection from
+`f3ab1ff`. Kept the latest trackpad retargeting and 420 ms glide with rotation
+and depth settling together at 280 ms. Millisecond pose samples verify the
+final approach is monotonic and lands on the exact resting quads. Physical
+trackpad feel remains to be checked.
+
+The song drawer uses available track credits. A normal rescan now reads embedded
+M4A artists without changing browse album identity. The refreshed Mac preview
+returned credits for all 14 tracks on the affected album with its original
+numeric ID and preserved the paused queue and favourites. The narrower song
+seek bar sends the clicked time, and the volume popup restores the previous
+level after mute. Font controls have visible steppers and accept up to 80 px.
+Settings uses the browse underline and corner radius. The Audio tab keeps the
+appliance catalogue alongside the Mac output selector, with dark list popups.
+Mac Qt 5.15.19 Debug and Release each reported 36 passing QtTest entries.
+Python unittest discovery passed 33 tests and Node passed 24. The Mac output
+list displayed all three output-capable devices reported by the host.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

@@ -65,11 +65,12 @@ private:
     QPointer<MediaInfoPanel> m_infoPanel;
     QString m_drawerAlbumId;
     QLabel *m_message, *m_time;
-    QToolButton *m_play, *m_repeat, *m_shuffle, *m_volumeButton;
+    QToolButton *m_play, *m_repeat, *m_shuffle, *m_volumeButton, *m_mute;
     QToolButton *m_captionActions;
     QToolButton *m_captionHeart;
     QFrame *m_searchPanel, *m_transportPanel;
     QSlider *m_seek, *m_volume, *m_albumStrip;
+    int m_volumeBeforeMute = 25;
     QTimer m_poll, m_searchDelay, m_snapBack;
     PlayerState m_player;
     bool m_demo = false, m_pollPending = false, m_commandPending = false;

@@ -9,7 +9,7 @@ double numberValue(const QJsonValue &value, double fallback = 0);
 bool boolValue(const QJsonValue &value);
 struct CaptionFontSizes {
     static constexpr int minimum = 10;
-    static constexpr int maximum = 40;
+    static constexpr int maximum = 80;
     int title = 40;
     int artist = 25;
     int album = 25;

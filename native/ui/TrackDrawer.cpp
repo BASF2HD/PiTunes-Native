@@ -293,7 +293,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
         const auto &track = tracks[i];
         auto *item = new QStandardItem(track.title.isEmpty() ? QString("Unknown song") : track.title);
         item->setEditable(false);
-        QString subtitle = track.artist;
+        QString subtitle = track.singer.isEmpty() ? track.artist : track.singer;
         if (!albumContext && !track.album.isEmpty()) {
             if (!subtitle.isEmpty()) subtitle += " · ";
             subtitle += albumWithYear(track.album, track.year);

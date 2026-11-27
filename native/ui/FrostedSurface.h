@@ -8,6 +8,7 @@
 
 namespace PiTunes {
 class CoverFlowWidget;
+constexpr int popupCornerRadius = 6;
 
 class FrostedPanel : public QFrame {
 public:

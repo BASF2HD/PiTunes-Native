@@ -94,6 +94,42 @@ private slots:
         window.coverFlow()->select(1, false); QTest::qWait(220);
         QVERIFY(!window.findChild<TrackDrawer *>());
     }
+    void clickingPlaybackSeekSendsTheClickedTimeAndMuteRestoresVolume() {
+        HttpFixture server;
+        int volume = 61;
+        QList<int> volumes, seeks;
+        server.respond = [&](const QByteArray &request) {
+            const auto body = QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
+            if (request.startsWith("POST /api/player/seek ")) seeks.append(body["seconds"].toInt());
+            if (request.startsWith("POST /api/player/volume ")) {
+                volume = body["volume"].toInt();
+                volumes.append(volume);
+            }
+            return HttpFixture::Response{QJsonDocument(QJsonObject{{"status", QJsonObject{
+                {"state", "pause"}, {"duration", 400}, {"elapsed", 8}, {"volume", volume}}}}).toJson()};
+        };
+        MainWindow window(server.url());
+        window.resize(1280, 680);
+        window.show();
+        QSlider *seek = nullptr;
+        for (auto *slider : window.findChildren<QSlider *>())
+            if (slider->accessibleName() == "Playback position") seek = slider;
+        QVERIFY(seek);
+        QTRY_COMPARE(seek->maximum(), 400);
+        QVERIFY(seek->width() <= 720);
+        QTest::mouseClick(seek, Qt::LeftButton, Qt::NoModifier, seek->rect().center());
+        QTRY_COMPARE(seeks.size(), 1);
+        QVERIFY(qAbs(seeks[0] - 200) <= 2);
+        QToolButton *mute = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Mute") mute = button;
+        QVERIFY(mute);
+        mute->click();
+        QTRY_COMPARE(mute->accessibleName(), QString("Unmute"));
+        mute->click();
+        QTRY_COMPARE(mute->accessibleName(), QString("Mute"));
+        QCOMPARE(volumes, QList<int>({0, 61}));
+    }
     void captionFollowsTheCentredAlbumWhileBrowsing() {
         HttpFixture server;
         server.respond = [](const QByteArray &request) {
@@ -203,18 +239,28 @@ private slots:
         auto *album = dialog->findChild<QSpinBox *>("captionAlbumSize");
         QVERIFY(title); QVERIFY(artist); QVERIFY(album);
         const auto original = window.coverFlow()->captionFontSizes();
-        title->setValue(35);
-        artist->setValue(21);
-        album->setValue(18);
+        const auto clickStep = [](QSpinBox *control, bool up) {
+            QStyleOptionSpinBox option;
+            option.initFrom(control);
+            option.buttonSymbols = QAbstractSpinBox::UpDownArrows;
+            const auto button = up ? QStyle::SC_SpinBoxUp : QStyle::SC_SpinBoxDown;
+            const auto position = control->style()->subControlRect(QStyle::CC_SpinBox, &option, button, control).center();
+            QTest::mouseClick(control, Qt::LeftButton, Qt::NoModifier, position);
+        };
+        title->setValue(45);
+        clickStep(title, true);
+        artist->setValue(44);
+        clickStep(artist, false);
+        album->setValue(42);
         const auto updated = window.coverFlow()->captionFontSizes();
-        QCOMPARE(updated.title, 35);
-        QCOMPARE(updated.artist, 21);
-        QCOMPARE(updated.album, 18);
+        QCOMPARE(updated.title, 46);
+        QCOMPARE(updated.artist, 43);
+        QCOMPARE(updated.album, 42);
         MainWindow reopened(server.url(), true);
         auto persisted = reopened.coverFlow()->captionFontSizes();
-        QCOMPARE(persisted.title, 35);
-        QCOMPARE(persisted.artist, 21);
-        QCOMPARE(persisted.album, 18);
+        QCOMPARE(persisted.title, 46);
+        QCOMPARE(persisted.artist, 43);
+        QCOMPARE(persisted.album, 42);
         title->setValue(original.title);
         artist->setValue(original.artist);
         album->setValue(original.album);
@@ -780,9 +826,9 @@ private slots:
         const auto right = projectCover(coverPose(1.), 100., {});
         const auto left = projectCover(coverPose(-1.), 100., {});
         QVERIFY(right.face[0].x() < centre.face[1].x());
-        QVERIFY(right.face[1].x() - centre.face[1].x() > 45.);
+        QVERIFY(right.face[1].x() - centre.face[1].x() > 60.);
         QVERIFY(right.face[2].y() > 97. && right.face[2].y() < 100.);
-        QVERIFY(right.face[3].y() < 93.);
+        QVERIFY(right.face[3].y() < 88.);
         QCOMPARE(right.face[2].y(), left.face[3].y());
         QCOMPARE(right.face[3].y(), left.face[2].y());
         for (const auto &card : {left, centre, right}) {
@@ -797,29 +843,29 @@ private slots:
             }
         }
     }
-    void glassMotionTurnsBeforeItFinishesSliding() {
+    void motionFinishesDepthAndRotationBeforeTheFinalGlide() {
         const auto side = coverPose(1.);
         const auto center = coverPose(0.);
         const auto incoming = animateCover(side, center, .28);
         QCOMPARE(incoming.yaw, 0.);
         QVERIFY(incoming.x > 0.);
-        QVERIFY(incoming.depth > 0.);
-        QVERIFY(incoming.scale < 1.);
-        const auto scaled = animateCover(side, center, .32);
-        QCOMPARE(scaled.scale, 1.);
-        QVERIFY(scaled.x > 0.);
+        QCOMPARE(incoming.depth, 0.);
+        double lastX = side.x;
+        for (int ms = 0; ms <= 420; ++ms) {
+            const auto pose = animateCover(side, center, ms / 1000.);
+            QVERIFY(pose.x <= lastX && pose.x >= center.x);
+            QVERIFY(qAbs(pose.depth / side.depth - pose.yaw / side.yaw) < .00001);
+            lastX = pose.x;
+        }
         const auto settled = animateCover(side, center, coverMoveDuration);
-        QCOMPARE(settled.x, 0.);
-        QCOMPARE(settled.depth, 0.);
-        QCOMPARE(settled.pivot, 0.);
-        QCOMPARE(settled.scale, 1.);
+        QCOMPARE(projectCover(settled, 100., {}).face, projectCover(center, 100., {}).face);
+        QCOMPARE(projectCover(settled, 100., {}).reflection, projectCover(center, 100., {}).reflection);
 
         const auto departure = animateCover(center, coverPose(-1.), .12);
         const auto retarget = animateCover(departure, coverPose(-2.), 0.);
         QCOMPARE(retarget.x, departure.x);
         QCOMPARE(retarget.yaw, departure.yaw);
-        QCOMPARE(retarget.scale, departure.scale);
-        QCOMPARE(retarget.pivot, departure.pivot);
+        QCOMPARE(retarget.depth, departure.depth);
         QCOMPARE(projectCover(retarget, 100., {}).face, projectCover(departure, 100., {}).face);
     }
     void nearerReflectionHidesItsNeighbour() {

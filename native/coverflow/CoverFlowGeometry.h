@@ -12,8 +12,6 @@ struct CoverPose {
     double x = 0.;
     double depth = 0.;
     double yaw = 0.;
-    double scale = 1.;
-    double pivot = 0.;
 };
 
 constexpr double coverMoveDuration = .42;

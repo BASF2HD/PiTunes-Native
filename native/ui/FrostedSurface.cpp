@@ -7,7 +7,6 @@
 namespace PiTunes {
 namespace {
 constexpr int tapRadius = 2;
-constexpr int menuRadius = 6;
 
 QImage blurPass(const QImage &source, bool horizontal) {
     const QSize size = source.size();
@@ -127,14 +126,14 @@ void FrostedMenu::paintEvent(QPaintEvent *event) {
         painter.setCompositionMode(QPainter::CompositionMode_Source);
         painter.fillRect(rect(), Qt::transparent);
     }
-    paintGlass(this, m_backdrop, QColor(12, 15, 24, 168), 35, menuRadius);
+    paintGlass(this, m_backdrop, QColor(12, 15, 24, 168), 35, popupCornerRadius);
     QMenu::paintEvent(event);
 }
 
 void FrostedMenu::resizeEvent(QResizeEvent *event) {
     QMenu::resizeEvent(event);
     QPainterPath outline;
-    outline.addRoundedRect(QRectF(rect()), menuRadius, menuRadius);
+    outline.addRoundedRect(QRectF(rect()), popupCornerRadius, popupCornerRadius);
     setMask(QRegion(outline.toFillPolygon().toPolygon()));
 }
 } // namespace PiTunes

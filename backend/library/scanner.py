@@ -153,6 +153,7 @@ def _tag_text(tags, *keys):
 def _parse_tags(path: Path):
     title = path.stem
     artist = UNKNOWN_ARTIST
+    mp4_artist = ""
     album = UNKNOWN_ALBUM
     album_artist = ""
     composer = ""
@@ -171,6 +172,8 @@ def _parse_tags(path: Path):
                 singer = _tag_text(tags, "artist", "TPE1", "singer", "Singer", "performer", "PERFORMER", "ARTIST")
                 if singer:
                     artist = singer
+                else:
+                    mp4_artist = _tag_text(tags, "\xa9ART") or ""
                 album = _tag_text(tags, "album", "TALB", "ALBUM") or album
                 album_artist = _tag_text(tags, "albumartist", "album artist", "TPE2", "ALBUMARTIST") or ""
                 composer = _tag_text(tags, "composer", "TCOM", "COMPOSER") or ""
@@ -189,6 +192,7 @@ def _parse_tags(path: Path):
     return {
         "title": title,
         "artist": track_artist,
+        "mp4_artist": mp4_artist,
         "composer": composer,
         "album": album,
         "album_artist": album_artist,
@@ -400,13 +404,15 @@ def _index_album_folder(conn, music_root: Path, folder: str, items, now: int, pr
     files_updated = 0
     for item in items:
         meta = item["meta"]
+        # Repair per-track credits without changing the existing album grouping.
+        track_artist = meta["artist"] or meta["mp4_artist"]
         prev = item["prev"]
         unchanged = (
             prev
             and prev[0] == item["mtime"]
             and prev[1] == item["size"]
             and prev[3] == album_id
-            and prev[4] == (meta["artist"] or "")
+            and prev[4] == track_artist
             and prev[5] == (meta["composer"] or "")
         )
 
@@ -423,7 +429,7 @@ def _index_album_folder(conn, music_root: Path, folder: str, items, now: int, pr
                 (
                     album_id,
                     meta["title"],
-                    meta["artist"] or "",
+                    track_artist,
                     meta["composer"] or "",
                     meta["track_number"],
                     meta["disc_number"],
@@ -445,7 +451,7 @@ def _index_album_folder(conn, music_root: Path, folder: str, items, now: int, pr
                     album_id,
                     item["rel"],
                     meta["title"],
-                    meta["artist"] or "",
+                    track_artist,
                     meta["composer"] or "",
                     meta["track_number"],
                     meta["disc_number"],
