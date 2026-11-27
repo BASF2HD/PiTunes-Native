@@ -36,34 +36,23 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
 #endif
     connect(&m_timer, &QTimer::timeout, this, [this] {
         sampleMotion();
-        if (qRound(m_motion.position) != m_captionRow) {
+        if (qRound(m_visualPosition) != m_captionRow) {
             updateCaption();
             prefetch();
         }
-        if (std::abs(m_motion.position - m_goal) < .0015 && std::abs(m_motion.velocity) < .023) {
+        if (m_seconds >= coverMoveDuration) {
             settle();
-            if (!m_trackpadActive) emit navigationSettled();
+            emit navigationSettled();
         }
         update();
     });
-    m_trackpadIdle.setSingleShot(true);
-    connect(&m_trackpadIdle, &QTimer::timeout, this, [this] {
-        m_trackpadActive = false;
-        if (m_timer.isActive()) sampleMotion();
-        const int landing = qRound(m_goal);
-        const double remaining = landing - m_motion.position;
-        // Increase damping when a fast approach would carry the cover past
-        // its landing. Keep both position and velocity continuous at release.
-        const double approach = remaining == 0. ? 0. : m_motion.velocity / remaining;
-        moveTo(landing, true, qBound(10., approach, 24.), true);
-        if (!m_timer.isActive()) emit navigationSettled();
-    });
+    m_wheelIdle.setSingleShot(true);
+    m_wheelIdle.setInterval(140);
+    connect(&m_wheelIdle, &QTimer::timeout, this, [this] { m_wheelRemainder = 0.; });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
-        m_trackpadIdle.stop();
-        m_trackpadActive = false;
+        m_wheelIdle.stop();
         m_target = 0;
-        m_goal = 0.;
-        m_wheelRemainder = 0;
+        m_wheelRemainder = 0.;
         settle();
         update();
     });
@@ -77,21 +66,22 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     });
 }
 int CoverFlowWidget::visibleCoverCount() const {
-    const auto [first, last] = visibleRows(m_motion.position);
+    const auto [first, last] = visibleRows(m_visualPosition);
     return qMax(0, last - first + 1);
 }
 double CoverFlowWidget::coverSize() const {
     const double fraction = m_transportInset > 0 ? .77 : .65;
     return qMax(1., qMin(width() * .46, qMin(height() * fraction,
-                  height() * .965 - m_transportInset - m_captionHeight)));
+                  height() - coverTop() - m_transportInset - m_captionHeight)));
 }
 QRect CoverFlowWidget::centreCoverRect() const {
     const double size = coverSize();
-    return QRectF((width() - size) / 2., height() * .035, size, size).toAlignedRect();
+    return QRectF((width() - size) / 2., coverTop(), size, size).toAlignedRect();
 }
 QRect CoverFlowWidget::captionRect() const {
-    const int textWidth = qMin(width() - 72, qBound(256, int(coverSize() * 1.05), 520));
-    const int y = qMax(qRound(height() * .035 + coverSize()), m_captionClearance) + 8;
+    const int desired = qMax(int(coverSize() * 1.05), m_captionPixels[0] * 12);
+    const int textWidth = qMin(width() - 72, qBound(256, desired, 600));
+    const int y = qMax(qRound(coverTop() + coverSize()), m_captionClearance) + 8;
     return {(width() - textWidth) / 2, y, textWidth, qMax(0, height() - m_transportInset - y)};
 }
 void CoverFlowWidget::setTransportInset(int pixels) {
@@ -132,71 +122,59 @@ QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     // Cull once a cover's inner edge leaves the viewport. Fractional positions
     // let edge covers slide out naturally during navigation.
     const double halfViewport = width() / (2. * coverSize());
-    const double screenReach = coverReach(halfViewport + .045 * carouselAmount(m_motion.velocity));
+    const double screenReach = coverReach(halfViewport);
     const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
     const double reach = qMin(screenReach, double(cacheReach));
     return {qMax(0, int(std::ceil(position - reach))),
             qMin(m_model->rowCount() - 1, int(std::floor(position + reach)))};
 }
 void CoverFlowWidget::select(int index, bool animate) {
-    m_trackpadIdle.stop();
-    m_trackpadActive = false;
-    moveTo(index, animate, 15.);
-}
-void CoverFlowWidget::moveTo(double position, bool animate, double response, bool trackpad) {
-    position = qBound(0., position, double(qMax(0, m_model->rowCount() - 1)));
+    index = qBound(0, index, qMax(0, m_model->rowCount() - 1));
     const bool moving = animate && !m_reduced && isVisible();
-    const int index = qRound(position);
-    if (!moving) position = index;
-    if (position == m_goal && (m_response == response || !m_timer.isActive()) &&
-        (moving || !m_timer.isActive()) && m_trackpadMotion == trackpad) return;
+    if (index == m_target && (moving || !m_timer.isActive())) return;
     if (m_timer.isActive()) sampleMotion();
-    const bool selectionChangedNow = m_target != index;
-    m_target = index;
-    m_goal = position;
-    m_response = response;
-    m_trackpadMotion = trackpad;
+    const bool changed = m_target != index;
     if (moving) {
-        m_start = m_motion;
+        // Retarget each cover from its current pose, as in the NaviGlassPlayer
+        // renderer. Retain a bounded window around both ends of the move.
+        QHash<int, CoverPose> from;
+        for (const double centre : {m_visualPosition, double(index)}) {
+            const auto [first, last] = visibleRows(centre);
+            for (int row = first; row <= last; ++row) from.insert(row, poseAt(row));
+        }
+        m_startPoses = std::move(from);
+        m_startPosition = m_visualPosition;
+        m_seconds = 0.;
+        m_target = index;
         m_clock.restart();
-        // Input often arrives faster than the frame interval. Leave an active
-        // timer alone so another packet cannot postpone the next paint.
         if (!m_timer.isActive()) m_timer.start();
     } else {
+        m_target = index;
         settle();
         update();
     }
-    if (selectionChangedNow) emit selectionChanged(index);
+    if (changed) emit selectionChanged(index);
+}
+CoverPose CoverFlowWidget::poseAt(int row) const {
+    const auto to = coverPose(row - m_target);
+    if (!m_timer.isActive()) return to;
+    return animateCover(m_startPoses.value(row, coverPose(row - m_startPosition)), to, m_seconds);
 }
 void CoverFlowWidget::sampleMotion() {
-    const double elapsed = m_clock.nsecsElapsed() / 1.e9;
-    if (m_trackpadMotion) {
-        m_motion = advanceCarouselMotion(m_motion, m_goal, elapsed, m_response);
-        m_clock.restart();
-    } else {
-        m_motion = advanceCoverMotion(m_start, m_goal, elapsed, m_response);
-    }
-    const double last = qMax(0, m_model->rowCount() - 1);
-    if (m_motion.position < 0. || m_motion.position > last) {
-        m_motion = {qBound(0., m_motion.position, last), 0.};
-        m_start = m_motion;
-        m_clock.restart();
-    }
+    m_seconds = m_clock.nsecsElapsed() / 1.e9;
+    m_visualPosition = m_startPosition + (m_target - m_startPosition) * coverMoveProgress(m_seconds);
 }
 void CoverFlowWidget::settle() {
     m_timer.stop();
-    m_trackpadMotion = false;
-    m_motion = {m_goal, 0.};
+    m_startPoses.clear();
+    m_visualPosition = m_target;
     updateCaption();
     prefetch();
     emit artworkBackdropChanged();
 }
 void CoverFlowWidget::setReducedMotion(bool reduced) {
     m_reduced = reduced;
-    if (reduced && (m_timer.isActive() || m_trackpadActive)) {
-        m_trackpadIdle.stop();
-        m_trackpadActive = false;
-        m_goal = m_target;
+    if (reduced && m_timer.isActive()) {
         settle();
         update();
         emit navigationSettled();
@@ -219,7 +197,9 @@ void CoverFlowWidget::setPlayback(const PlayerState &state) {
     update();
 }
 void CoverFlowWidget::updateCaption() {
-    m_captionRow = qRound(m_motion.position);
+    const int previousRow = m_captionRow;
+    const bool previousPlayback = m_captionShowsPlayback;
+    m_captionRow = qRound(m_visualPosition);
     const auto *album = m_model->album(m_captionRow);
     m_captionShowsPlayback = !m_playingCaption.isEmpty() && (!album || (!m_playingId.isEmpty() && album->id == m_playingId));
     QStringList caption;
@@ -236,9 +216,12 @@ void CoverFlowWidget::updateCaption() {
         caption << title;
         if (!subtitle.isEmpty()) caption << subtitle;
     }
-    if (caption == m_caption) return;
-    m_caption = caption;
-    setAccessibleDescription(caption.join('\n'));
+    const bool textChanged = caption != m_caption;
+    if (textChanged) {
+        m_caption = caption;
+        setAccessibleDescription(caption.join('\n'));
+    }
+    if (textChanged || previousRow != m_captionRow || previousPlayback != m_captionShowsPlayback) emit captionChanged();
 }
 void CoverFlowWidget::setCaptionClearance(int lowerEdge) {
     if (lowerEdge == m_captionClearance) return;
@@ -247,7 +230,7 @@ void CoverFlowWidget::setCaptionClearance(int lowerEdge) {
 }
 void CoverFlowWidget::prefetch() {
     QStringList keys;
-    const int center = qRound(m_motion.position);
+    const int center = qRound(m_visualPosition);
     const auto [first, last] = visibleRows(center);
     const int reach = qMax(center - first, last - center);
     for (int step = 0; step <= reach; ++step) {
@@ -278,7 +261,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         return;
     }
     const double size = coverSize();
-    const double top = height() * .035;
+    const double top = coverTop();
     // The artwork cache already holds thumbnails. On HiDPI displays, do the
     // expensive projective passes at logical resolution during movement. Draw
     // the caption and the final resting frame at the display pixel ratio.
@@ -323,7 +306,7 @@ void CoverFlowWidget::paintArtworkBackdrop(QPainter &painter) const {
     if (m_model->rowCount() == 0) return;
     painter.save();
     painter.setClipRect(rect(), Qt::IntersectClip);
-    paintCovers(painter, coverSize(), height() * .035);
+    paintCovers(painter, coverSize(), coverTop());
     painter.restore();
 }
 void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
@@ -331,27 +314,36 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     if (hits) hits->clear();
-    const auto [first, last] = visibleRows(m_motion.position);
-    QVector<int> rows;
-    for (int i = first; i <= last; ++i) rows.append(i);
-    std::sort(rows.begin(), rows.end(), [this](int a, int b) {
-        const auto da = std::abs(a - m_motion.position);
-        const auto db = std::abs(b - m_motion.position);
-        if (da == db) return b == m_target && a != m_target;
-        return da > db;
-    });
+    const auto [first, last] = visibleRows(m_visualPosition);
     const QPointF origin(width() / 2., top);
     struct Card {
         int row;
+        double depth;
         CoverQuads quads;
         const Artwork *art;
     };
     QVector<Card> cards;
-    cards.reserve(rows.size());
-    for (int row : rows) {
-        cards.append({row, projectCover(row - m_motion.position, size, origin, m_motion.velocity),
-                      m_artwork->find(m_model->album(row)->artUrl)});
+    cards.reserve(last - first + 1 + m_startPoses.size());
+    const auto addCard = [&](int row) {
+        const auto *album = m_model->album(row);
+        if (!album) return;
+        const auto pose = poseAt(row);
+        auto quads = projectCover(pose, size, origin);
+        if (!quads.face.boundingRect().intersects(QRectF(rect())) &&
+            !quads.reflection.boundingRect().intersects(QRectF(rect()))) return;
+        cards.append({row, pose.depth, std::move(quads), m_artwork->find(album->artUrl)});
+    };
+    for (int row = first; row <= last; ++row) addCard(row);
+    for (auto it = m_startPoses.cbegin(); it != m_startPoses.cend(); ++it) {
+        if (it.key() < first || it.key() > last) addCard(it.key());
     }
+    std::sort(cards.begin(), cards.end(), [this](const Card &a, const Card &b) {
+        if (a.depth != b.depth) return a.depth > b.depth;
+        const auto distanceA = std::abs(a.row - m_visualPosition);
+        const auto distanceB = std::abs(b.row - m_visualPosition);
+        if (distanceA != distanceB) return distanceA > distanceB;
+        return a.row < b.row;
+    });
 
     // Mask neighbouring reflections back to front. Paint covers in a separate
     // pass so a sloping reflection never cuts through an adjacent cover face.
@@ -389,23 +381,14 @@ void CoverFlowWidget::wheelEvent(QWheelEvent *e) {
     const bool pixelScroll = !e->pixelDelta().isNull();
     const auto delta = pixelScroll ? e->pixelDelta() : e->angleDelta();
     const int dominant = std::abs(delta.y()) >= std::abs(delta.x()) ? delta.y() : delta.x();
-    if (pixelScroll && !m_reduced && isVisible()) {
-        m_trackpadActive = true;
-        moveTo(m_goal - dominant / 52., true, 24., true);
-        m_trackpadIdle.start(85);
-        e->accept();
-        return;
-    }
-    if (m_trackpadActive && delta.isNull()) {
-        if (e->phase() == Qt::ScrollEnd) m_trackpadIdle.start(28);
-        e->accept();
-        return;
-    }
-    m_wheelRemainder -= dominant / (pixelScroll ? 52. : 120.);
-    const int steps = int(m_wheelRemainder);
+    // NaviGlassPlayer accumulates whole-cover steps from clamped wheel
+    // packets. A burst updates the destination of the running transition.
+    const double step = pixelScroll ? qBound(-1.2, -dominant * .018, 1.2) : -dominant / 120.;
+    m_wheelRemainder += step;
+    const int steps = int(m_wheelRemainder + std::copysign(1.e-9, m_wheelRemainder));
     m_wheelRemainder -= steps;
     if (steps != 0) select(m_target + steps);
-    if (e->phase() == Qt::ScrollEnd) m_wheelRemainder = 0;
+    if (dominant != 0) m_wheelIdle.start();
     e->accept();
 }
 void CoverFlowWidget::mousePressEvent(QMouseEvent *e) { m_press = e->localPos(); m_dragging = false; setFocus(); }

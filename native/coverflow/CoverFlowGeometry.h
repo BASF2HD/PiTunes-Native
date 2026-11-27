@@ -8,17 +8,19 @@ struct CoverQuads {
     QPolygonF reflection;
 };
 
-// Geometry is normalized to the centre cover. Its floor is at y=1 and its
-// centre is x=0. Each side cover projects onto the same floor plane.
-CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double velocity = 0.);
-double coverReach(double halfViewport);
-double carouselAmount(double velocity);
-
-struct CoverMotion {
-    double position = 0;
-    double velocity = 0;
+struct CoverPose {
+    double x = 0.;
+    double depth = 0.;
+    double yaw = 0.;
+    double scale = 1.;
+    double pivot = 0.;
 };
 
-CoverMotion advanceCoverMotion(CoverMotion start, double target, double seconds, double response = 15.);
-CoverMotion advanceCarouselMotion(CoverMotion start, double target, double seconds, double response);
+constexpr double coverMoveDuration = .42;
+
+CoverPose coverPose(double distance);
+CoverPose animateCover(const CoverPose &from, const CoverPose &to, double seconds);
+double coverMoveProgress(double seconds);
+CoverQuads projectCover(const CoverPose &pose, double pixels, const QPointF &origin);
+double coverReach(double halfViewport);
 } // namespace PiTunes

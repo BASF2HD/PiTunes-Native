@@ -14,6 +14,11 @@ add_library(pitunes-core
   native/coverflow/CoverFlowGeometry.cpp native/coverflow/CoverFlowWidget.cpp)
 target_include_directories(pitunes-core PUBLIC native)
 target_link_libraries(pitunes-core PUBLIC Qt5::Widgets Qt5::Network Qt5::Concurrent Qt5::Svg)
+if(APPLE)
+  find_library(CORE_AUDIO_FRAMEWORK CoreAudio)
+  find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation)
+  target_link_libraries(pitunes-core PUBLIC "${CORE_AUDIO_FRAMEWORK}" "${CORE_FOUNDATION_FRAMEWORK}")
+endif()
 target_compile_options(pitunes-core PRIVATE -Wall -Wextra -Wpedantic)
 if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86_64|amd64)$")
   # Debian 12's non-SSE2 Qt baseline is retained; never inherit the build host CPU.

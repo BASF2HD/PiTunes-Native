@@ -31,8 +31,8 @@
 
 namespace PiTunes {
 namespace {
-constexpr int transportHeight = 40;
-constexpr int browseHeight = 44;
+constexpr int transportHeight = 35;
+constexpr int browseHeight = 40;
 constexpr int footerHeight = transportHeight + browseHeight;
 
 QString albumTracksPath(const QString &id) {
@@ -52,10 +52,10 @@ protected:
         m_thumbWidth = width;
         setStyleSheet(QString(
             "QSlider { background: transparent; }"
-            "QSlider::groove:horizontal { height: 16px; background: transparent; "
+            "QSlider::groove:horizontal { height: 12px; background: transparent; "
             "border-left: 1px solid rgba(210,218,235,52); border-right: 1px solid rgba(210,218,235,52); }"
             "QSlider::handle:horizontal { width: %1px; margin: 0; border: 1px solid rgba(225,232,245,145); "
-            "border-radius: 7px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "border-radius: 6px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
             "stop:0 #5b5f65,stop:0.23 #222429,stop:0.56 #07080a,stop:1 #181a1f); }").arg(width));
     }
 
@@ -97,15 +97,17 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         preferences.value("native/captionAlbumSize", defaults.album).toInt()
     });
     auto *root = new QWidget(this); auto *layout = new QVBoxLayout(root);
-    layout->setContentsMargins(20, 12, 20, 10); layout->setSpacing(4); setCentralWidget(root);
+    layout->setContentsMargins(20, 9, 20, 10); layout->setSpacing(2); setCentralWidget(root);
     root->setStyleSheet(
         "QToolButton { background: transparent; border: 1px solid transparent; color: #f4f5fa; padding: 0; }"
         "QToolButton:hover, QToolButton:focus { color: white; background: #1a1d25; border: 1px solid #414651; border-radius: 5px; }"
         "QToolButton::menu-indicator { width: 0; }"
         "QToolButton#roundControl { border: 1px solid #383b45; border-radius: 16px; }"
+        "QToolButton#captionHeart, QToolButton#captionHeart:hover, QToolButton#captionHeart:focus {"
+        "border: 1px solid #383b45; border-radius: 14px; }"
         "QToolButton#trackStep:hover, QToolButton#trackStep:focus { border-radius: 16px;"
           "border: 1px solid rgba(225,232,245,48); background: rgba(225,232,245,34); }"
-        "QToolButton#mainPlay { border: 1px solid #686b78; border-radius: 19px;"
+        "QToolButton#mainPlay { border: 1px solid #686b78; border-radius: 17px;"
           "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #373942,stop:1 #20222a); }"
         "QToolButton#mainPlay:hover, QToolButton#mainPlay:focus { border-color: #b5bac8; background: #343846; }"
         "QToolButton#browseTab { border-radius: 0; border: 1px solid transparent; font-size: 10px; font-weight: 600; }"
@@ -121,7 +123,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         return button;
     };
     auto *header = new QHBoxLayout;
-    header->setContentsMargins(0, 0, 0, 3);
+    header->setContentsMargins(0, 0, 0, 0);
     header->setSpacing(9);
     layout->addLayout(header);
     m_repeat = iconButton(PlayerIcon::Repeat, "Repeat off");
@@ -205,6 +207,15 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_captionActions->setObjectName("roundControl");
     m_captionActions->hide();
     connect(m_captionActions, &QToolButton::clicked, this, &MainWindow::showCaptionActions);
+    m_captionHeart = iconButton(PlayerIcon::Favourite, "Favourite", 30);
+    m_captionHeart->setParent(m_flow);
+    m_captionHeart->setObjectName("captionHeart");
+    m_captionHeart->hide();
+    connect(m_captionHeart, &QToolButton::clicked, this, [this] {
+        const auto [id, album] = captionFavouriteSubject();
+        toggleFavourite(id, album);
+    });
+    connect(m_flow, &CoverFlowWidget::captionChanged, this, &MainWindow::syncCaptionHeart);
 
     m_transportPanel = new QFrame(m_flow);
     m_transportPanel->setObjectName("transportPanel");
@@ -212,17 +223,31 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     auto *footer = new QVBoxLayout(m_transportPanel);
     footer->setContentsMargins(0, 0, 0, 0);
     footer->setSpacing(0);
-    auto *transport = new QHBoxLayout;
-    transport->setSpacing(8);
-    footer->addLayout(transport);
+    const auto centredRow = [footer, this](int maxWidth, int spacing) {
+        auto *outer = new QHBoxLayout;
+        outer->setSpacing(0);
+        auto *row = new QWidget(m_transportPanel);
+        row->setObjectName("footerRow");
+        row->setStyleSheet("QWidget#footerRow { background: transparent; }");
+        row->setMaximumWidth(maxWidth);
+        auto *inner = new QHBoxLayout(row);
+        inner->setContentsMargins(0, 0, 0, 0);
+        inner->setSpacing(spacing);
+        outer->addStretch(1);
+        outer->addWidget(row, 12);
+        outer->addStretch(1);
+        footer->addLayout(outer);
+        return inner;
+    };
+    auto *transport = centredRow(920, 7);
     m_flow->setTransportInset(footerHeight);
     auto *previous = iconButton(PlayerIcon::Previous, "Previous song", 32);
     previous->setObjectName("trackStep");
     connect(previous, &QToolButton::clicked, this, [this] { command("/api/player/previous"); });
     transport->addWidget(previous);
-    m_play = iconButton(PlayerIcon::Play, "Play or pause", 38);
+    m_play = iconButton(PlayerIcon::Play, "Play or pause", 34);
     m_play->setObjectName("mainPlay");
-    m_play->setIconSize(QSize(24, 24));
+    m_play->setIconSize(QSize(22, 22));
     m_play->setProperty("playing", false);
     connect(m_play, &QToolButton::clicked, this, [this] {
         if (m_player.track.file.isEmpty()) showAlbum(m_flow->currentIndex(), true);
@@ -237,19 +262,19 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     auto *albumRail = new QFrame(m_transportPanel);
     albumRail->setObjectName("albumRail");
     albumRail->setStyleSheet(
-        "QFrame#albumRail { border: 1px solid rgba(225, 232, 245, 68); border-radius: 10px; background:"
+        "QFrame#albumRail { border: 1px solid rgba(225, 232, 245, 68); border-radius: 8px; background:"
         "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(255,255,255,44),"
         "stop:0.48 rgba(255,255,255,13),stop:1 rgba(255,255,255,28)); }"
         "QToolButton { border: 0; } QToolButton:hover { background: rgba(230,235,248,60); }");
-    albumRail->setFixedHeight(20);
+    albumRail->setFixedHeight(16);
     auto *rail = new QHBoxLayout(albumRail);
     rail->setContentsMargins(5, 1, 5, 1);
     rail->setSpacing(2);
     auto *coverBack = iconButton(PlayerIcon::Left, "Previous album", 25);
-    coverBack->setFixedHeight(16);
+    coverBack->setFixedHeight(12);
     coverBack->setIconSize(QSize(12, 12));
     auto *coverForward = iconButton(PlayerIcon::Right, "Next album", 25);
-    coverForward->setFixedHeight(16);
+    coverForward->setFixedHeight(12);
     coverForward->setIconSize(QSize(12, 12));
     m_albumStrip = new AlbumStrip(albumRail);
     m_albumStrip->setRange(0, 0);
@@ -269,9 +294,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     });
     transport->addWidget(drawer);
 
-    auto *navigation = new QHBoxLayout;
-    navigation->setSpacing(2);
-    footer->addLayout(navigation);
+    auto *navigation = centredRow(520, 6);
     buildBrowseMenus(navigation, m_transportPanel, reduced);
     m_message = new QLabel(root);
     m_message->setWordWrap(true);
@@ -353,6 +376,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         m_pendingAlbumRow = -1;
         closeTrackDrawer();
         m_captionActions->hide();
+        m_captionHeart->hide();
         syncAlbumStrip();
     });
     connect(m_library, &LibraryModel::pageLoaded, this, [this] {
@@ -360,6 +384,8 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         else focusInitialPlaybackAlbum();
         syncAlbumStrip();
         m_captionActions->setVisible(m_library->rowCount() > 0);
+        syncCaptionHeart();
+        if (!m_favouritesReady) refreshFavourites();
         placeOverlays();
         setMessage({});
         if (!m_snapBack.isActive()) scheduleReturnToPlayback();
@@ -567,6 +593,7 @@ void MainWindow::placeOverlays() {
     m_transportPanel->setGeometry(0, m_flow->height() - footerHeight, m_flow->width(), footerHeight);
     const auto caption = m_flow->captionRect();
     m_captionActions->move(caption.right() + 4, caption.top());
+    m_captionHeart->move(caption.right() + 5, caption.top() + m_captionActions->height() + 2);
     if (m_searchPanel->isVisible()) {
         m_searchPanel->setFixedWidth(qMin(575, m_flow->width() - 16));
         m_searchPanel->adjustSize();
@@ -801,7 +828,25 @@ void MainWindow::updateFavouriteHearts() {
         m_trackDrawer->setAlbumFavourite(m_albumFavourites.contains(m_drawerAlbumId), ready);
         m_trackDrawer->setTrackFavourites(m_trackFavourites, ready);
     }
-    emit favouritesChanged();
+    syncCaptionHeart();
+}
+
+QPair<QString, bool> MainWindow::captionFavouriteSubject() const {
+    const auto *album = m_library->album(m_flow->captionAlbumIndex());
+    if (!album) return {};
+    if (m_flow->captionShowsPlayback() && !m_player.track.file.isEmpty()) return {m_player.track.file, false};
+    return {album->id, true};
+}
+
+void MainWindow::syncCaptionHeart() {
+    const auto [id, album] = captionFavouriteSubject();
+    const bool starred = (album ? m_albumFavourites : m_trackFavourites).contains(id);
+    const QString label = (starred ? "Remove favourite " : "Favourite ") + QString(album ? "album" : "song");
+    m_captionHeart->setIcon(playerIcon(starred ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite));
+    m_captionHeart->setAccessibleName(label);
+    m_captionHeart->setToolTip(label);
+    m_captionHeart->setEnabled(m_favouritesReady || m_demo);
+    m_captionHeart->setVisible(!id.isEmpty() && m_captionActions->isVisibleTo(m_flow));
 }
 
 void MainWindow::toggleFavourite(const QString &id, bool album) {
@@ -833,8 +878,7 @@ void MainWindow::toggleFavourite(const QString &id, bool album) {
 void MainWindow::showCaptionActions() {
     const auto *album = m_library->album(m_flow->captionAlbumIndex());
     if (!album) return;
-    const bool playingHere = m_player.state == "play" && !m_player.track.file.isEmpty() &&
-        m_player.track.albumId == album->id;
+    const bool playingHere = m_flow->captionShowsPlayback() && !m_player.track.file.isEmpty();
     const auto anchor = m_captionActions->mapToGlobal(QPoint(m_captionActions->width(), 0));
     if (!playingHere) { showSubjectActions(anchor, *album, {}); return; }
     auto track = m_player.track;
@@ -865,17 +909,6 @@ void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, co
                 });
         });
     add->setEnabled(!id.isEmpty() && !m_demo);
-    if (row < 0) {
-        auto *favourite = menu->addAction(QString(), this, [this, id, albumContext] { toggleFavourite(id, albumContext); });
-        const auto labelFavourite = [this, favourite, id, albumContext] {
-            const bool starred = (albumContext ? m_albumFavourites : m_trackFavourites).contains(id);
-            favourite->setText(starred ? "Remove favourite" : "Favourite");
-            favourite->setEnabled(!id.isEmpty() && (m_favouritesReady || m_demo));
-        };
-        connect(this, &MainWindow::favouritesChanged, menu, labelFavourite);
-        labelFavourite();
-        refreshFavourites();
-    }
     menu->addAction("More info", this, [this, album, track, row] { showMediaInfo(album, track, row); });
     if (!list.isEmpty()) {
         menu->addSeparator();

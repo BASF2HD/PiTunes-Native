@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QListView>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QSlider>
@@ -148,16 +149,19 @@ private slots:
     void browseButtonsHaveContextMenus() {
         HttpFixture server;
         MainWindow window(server.url(), true);
+        window.resize(1280, 680);
         window.show();
         const QMap<QString, QString> items{
             {"Albums", "Favourite"}, {"Songs", "Group by album"}, {"Artists", "Browse artists"},
             {"Playlists", "Playlist order"}, {"More", "Genres"}, {"Settings", "Application settings"}
         };
         int found = 0;
+        QVector<int> centres;
         for (auto *button : window.findChildren<QToolButton *>()) {
             const auto expected = items.value(button->accessibleName());
             if (expected.isEmpty()) continue;
             ++found;
+            centres.append(button->mapTo(&window, button->rect().center()).x());
             QTest::mouseClick(button, Qt::LeftButton);
             auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
             QVERIFY(menu);
@@ -168,6 +172,9 @@ private slots:
             menu->hide();
         }
         QCOMPARE(found, items.size());
+        const auto horizontal = std::minmax_element(centres.cbegin(), centres.cend());
+        QVERIFY(*horizontal.second - *horizontal.first < 520);
+        QVERIFY(qAbs((*horizontal.second + *horizontal.first) / 2 - window.width() / 2) < 5);
     }
     void fontTabResizesAndPersistsEachCaptionLine() {
         HttpFixture server;
@@ -211,6 +218,20 @@ private slots:
         title->setValue(original.title);
         artist->setValue(original.artist);
         album->setValue(original.album);
+        auto *titleBar = dialog->findChild<QWidget *>("settingsTitleBar");
+        auto *close = dialog->findChild<QToolButton *>("settingsClose");
+        QVERIFY(titleBar); QVERIFY(close);
+        const QPoint start = dialog->pos();
+        const QPoint local(45, 14);
+        const QPoint global = titleBar->mapToGlobal(local);
+        QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QMouseEvent move(QEvent::MouseMove, local + QPoint(42, 23), global + QPoint(42, 23),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(titleBar, &press);
+        QCoreApplication::sendEvent(titleBar, &move);
+        QCOMPARE(dialog->pos(), start + QPoint(42, 23));
+        QTest::mouseClick(close, Qt::LeftButton);
+        QTRY_VERIFY(!window.findChild<SettingsDialog *>());
         QCOMPARE(server.requests.size(), 0);
     }
     void returnsToPlayingAlbumAfterBrowsingAndClosingDrawer() {
@@ -269,16 +290,22 @@ private slots:
             if (button->accessibleName() == "Favourite album") heart = button;
         QVERIFY(heart);
         QTRY_VERIFY(heart->isEnabled());
+        auto *captionHeart = window.findChild<QToolButton *>("captionHeart");
+        QVERIFY(captionHeart);
+        QVERIFY(captionHeart->isVisible());
+        QCOMPARE(captionHeart->accessibleName(), QString("Favourite album"));
         const auto outline = heart->icon().cacheKey();
-        QTest::mouseClick(heart, Qt::LeftButton);
+        QTest::mouseClick(captionHeart, Qt::LeftButton);
         QVERIFY(heart->isChecked());
         QVERIFY(heart->icon().cacheKey() != outline);
+        QCOMPARE(captionHeart->accessibleName(), QString("Remove favourite album"));
         QTRY_COMPARE(posts, 1);
         QTest::qWait(125);
         QTest::mouseClick(heart, Qt::LeftButton);
         QVERIFY(!heart->isChecked());
         QTRY_COMPARE(posts, 2);
         QTRY_VERIFY(heart->isChecked());
+        QCOMPARE(captionHeart->accessibleName(), QString("Remove favourite album"));
         int mutations = 0;
         for (const auto &request : server.requests) {
             if (!request.startsWith("POST /api/library/favourites")) continue;
@@ -708,7 +735,7 @@ private slots:
             QTest::qWait(5);
             scroll({0, -13}, {}, Qt::ScrollUpdate);
         }
-        QCOMPARE(widget.currentIndex(), 3);
+        QCOMPARE(widget.currentIndex(), 2);
         QVERIFY(widget.animating());
         QVERIFY(widget.paintCount() > paints);
         QVERIFY(widget.visualPosition() > 0. && widget.visualPosition() < 3.);
@@ -719,6 +746,17 @@ private slots:
         scroll({}, {0, 120}, Qt::NoScrollPhase);
         QCOMPARE(widget.currentIndex(), 2);
         QTRY_VERIFY(!widget.animating());
+
+        scroll({0, -200}, {}, Qt::ScrollBegin);
+        for (int packet = 1; packet < 5; ++packet) {
+            QTest::qWait(9);
+            scroll({0, -200}, {}, Qt::ScrollUpdate);
+        }
+        scroll({}, {}, Qt::ScrollEnd);
+        QCOMPARE(widget.currentIndex(), 8);
+        QVERIFY(widget.animating());
+        QTRY_VERIFY(!widget.animating());
+        QCOMPARE(widget.visualPosition(), 8.);
     }
     void coverStackFitsViewport() {
         HttpFixture server;
@@ -738,13 +776,13 @@ private slots:
 
     }
     void firstNeighboursTurnAndReflectOnTheSameFloor() {
-        const auto centre = projectCover(0., 100., {});
-        const auto right = projectCover(1., 100., {});
-        const auto left = projectCover(-1., 100., {});
+        const auto centre = projectCover(coverPose(0.), 100., {});
+        const auto right = projectCover(coverPose(1.), 100., {});
+        const auto left = projectCover(coverPose(-1.), 100., {});
         QVERIFY(right.face[0].x() < centre.face[1].x());
-        QVERIFY(right.face[1].x() - centre.face[1].x() > 60.);
+        QVERIFY(right.face[1].x() - centre.face[1].x() > 45.);
         QVERIFY(right.face[2].y() > 97. && right.face[2].y() < 100.);
-        QVERIFY(right.face[3].y() < 88.);
+        QVERIFY(right.face[3].y() < 93.);
         QCOMPARE(right.face[2].y(), left.face[3].y());
         QCOMPARE(right.face[3].y(), left.face[2].y());
         for (const auto &card : {left, centre, right}) {
@@ -758,59 +796,31 @@ private slots:
                 QVERIFY(qAbs(reflectedHeight / height - .5) < .001);
             }
         }
-        // At the depth-order crossover the two faces have room to pass.
-        const auto departing = projectCover(-.5, 100., {});
-        const auto arriving = projectCover(.5, 100., {});
-        const double gap = arriving.face[0].x() - departing.face[1].x();
-        QVERIFY(gap > 4. && gap < 12.);
     }
-    void outgoingCoverTurnsMoreThanTheCoverGlidingIn() {
-        const auto tilt = [](const CoverQuads &cover) {
-            return qAbs(cover.face[1].y() - cover.face[0].y());
-        };
-        const auto leftLeaving = projectCover(-.42, 100., {}, 3.);
-        const auto rightArriving = projectCover(.42, 100., {}, 3.);
-        QVERIFY(tilt(leftLeaving) > tilt(rightArriving) * 1.5);
-        QVERIFY(qAbs(tilt(leftLeaving) - tilt(projectCover(.42, 100., {}, -3.))) < .001);
-        QVERIFY(qAbs(tilt(rightArriving) - tilt(projectCover(-.42, 100., {}, -3.))) < .001);
-        QCOMPARE(projectCover(0., 100., {}, 3.).face, projectCover(0., 100., {}).face);
-        QCOMPARE(projectCover(1., 100., {}, 3.).face, projectCover(1., 100., {}).face);
-        QCOMPARE(leftLeaving.face[2].x(), leftLeaving.reflection[1].x());
-    }
-    void retargetingPreservesCoverVelocity() {
-        const CoverMotion resting;
-        const auto firstFrame = advanceCoverMotion(resting, 1., .016);
-        QVERIFY(firstFrame.position > 0. && firstFrame.position < .06);
-        const auto halfway = advanceCoverMotion(resting, 1., .11);
-        QVERIFY(halfway.position > .42 && halfway.position < .55);
-        const auto settled = advanceCoverMotion(resting, 1., .47);
-        QVERIFY(settled.position > .99 && settled.position < 1.);
-        for (const double target : {0., 2.}) {
-            const auto retarget = advanceCoverMotion(halfway, target, 0.);
-            QVERIFY(qAbs(retarget.position - halfway.position) < 1.e-10);
-            QVERIFY(qAbs(retarget.velocity - halfway.velocity) < 1.e-10);
-            const auto next = advanceCoverMotion(halfway, target, .0001);
-            const double velocity = (next.position - halfway.position) / .0001;
-            QVERIFY(qAbs(velocity - halfway.velocity) < .05);
-        }
-    }
-    void fastCarouselKeepsCoversBroadAndReachesTheGestureDestination() {
-        CoverMotion motion;
-        for (int frame = 0; frame < 120; ++frame) {
-            const auto next = advanceCarouselMotion(motion, 12., .016, 20.);
-            QVERIFY(next.position >= motion.position - 1.e-8);
-            QVERIFY(next.position <= 12. + 1.e-8);
-            QVERIFY(next.position - motion.position <= .321);
-            QVERIFY(next.velocity <= 20.);
-            motion = next;
-        }
-        QVERIFY(qAbs(motion.position - 12.) < .001);
-        const auto passing = projectCover(0., 100., {}, 20.);
-        QVERIFY(passing.face.boundingRect().height() >= 85.);
-        QVERIFY(passing.face.boundingRect().height() < 100.);
-        const auto left = projectCover(-.5, 100., {}, 20.);
-        const auto right = projectCover(.5, 100., {}, 20.);
-        QVERIFY(right.face[0].x() > left.face[1].x());
+    void glassMotionTurnsBeforeItFinishesSliding() {
+        const auto side = coverPose(1.);
+        const auto center = coverPose(0.);
+        const auto incoming = animateCover(side, center, .28);
+        QCOMPARE(incoming.yaw, 0.);
+        QVERIFY(incoming.x > 0.);
+        QVERIFY(incoming.depth > 0.);
+        QVERIFY(incoming.scale < 1.);
+        const auto scaled = animateCover(side, center, .32);
+        QCOMPARE(scaled.scale, 1.);
+        QVERIFY(scaled.x > 0.);
+        const auto settled = animateCover(side, center, coverMoveDuration);
+        QCOMPARE(settled.x, 0.);
+        QCOMPARE(settled.depth, 0.);
+        QCOMPARE(settled.pivot, 0.);
+        QCOMPARE(settled.scale, 1.);
+
+        const auto departure = animateCover(center, coverPose(-1.), .12);
+        const auto retarget = animateCover(departure, coverPose(-2.), 0.);
+        QCOMPARE(retarget.x, departure.x);
+        QCOMPARE(retarget.yaw, departure.yaw);
+        QCOMPARE(retarget.scale, departure.scale);
+        QCOMPARE(retarget.pivot, departure.pivot);
+        QCOMPARE(projectCover(retarget, 100., {}).face, projectCover(departure, 100., {}).face);
     }
     void nearerReflectionHidesItsNeighbour() {
         HttpFixture server;

@@ -175,6 +175,29 @@ All 35 native cases passed in Debug and Release with Qt 5.15.19. The
 regressions cover the Font tab, row favourites without playback, thumb
 geometry, rounded popup masks and the fast gesture destination.
 
+Adapted the local NaviGlassPlayer runtime renderer's normalized 52-degree
+side angle, edge pivot and cubic easing after reviewing `public/renderer.js`
+and the wheel handler in `public/app.js`. Position, rotation and scale each
+retarget from the current pose during input bursts. Qt still projects each
+cover and its reflection together and keeps the renderer and artwork caches
+bounded. The previous speed-dependent carousel is superseded. Local native
+checks cover painting through input bursts, pose timing, neighbour reflection
+masking and idle settling.
+
+The footer is now centered within a 520 px menu row and a maximum 920 px
+transport row. The transport and seek-to-cover gap are slimmer. Caption
+defaults are 40/25/25 px. Songs use darker glass and closer heart/time
+spacing, and the caption has its own contextual heart. Settings uses compact
+tabs, a rounded shell, a title drag area and a top-right close button.
+
+The Mac preview was playing through MPD's enabled `osx` output while macOS
+was muted with the built-in speakers selected. Unmuted system output without
+changing its volume. The Audio tab now shows the actual system output on
+the local Darwin preview. Verified the built-in speaker selection in that
+tab and that playback time advanced. Audible output remains unverified.
+All 33 native cases passed in Debug and Release with Qt 5.15.19, including
+the compact footer, settings drag and close, and caption favourite rollback.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

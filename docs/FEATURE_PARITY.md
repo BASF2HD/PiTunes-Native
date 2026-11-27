@@ -13,7 +13,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | Full-text search | SQLite FTS5, fallback | Floating search panel and touch keyboard preserve cover and transport geometry. Debounced album search and matching songs use the server's 120-result limit. Closing restores the prior album scope and sort. |
 | Scan progress, incremental rescan, cache rebuild | scanner/art resolver | Rescan/rebuild controls; progress presentation pending |
 | Artwork, missing/corrupt fallback | backend 128/420 thumbnails | Async bounded native cache/reflections/fallback, decode/LRU/jobs tested |
-| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter projects borderless cover art and reflections from a shared floor. Fast trackpad motion keeps passing covers broad and paces their crossings while preserving the destination. Artwork remains visible behind the footer and frosted popups. |
+| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter projects borderless cover art and reflections from a shared floor. The native transition follows the NaviGlassPlayer renderer's pivots and separate pose timing for regular and fast scroll. Artwork remains visible behind the footer and frosted popups. |
 | Mouse, wheel, keyboard, touchscreen, drag | web event handlers | Native handlers implemented; keyboard QTest passed; physical touch pending |
 | Album/song direct playback | ID/file routes, fast start/full prefix | Native submits exact file/full album URI queue; MPD hardware pending |
 | Play / pause / stop / previous / next | MPD API | Circular play/pause and distinct track skip buttons below the covers. Stop is in the icon menu. Native async intents and bounded serialization tested against an HTTP fixture. |
@@ -32,7 +32,7 @@ with tests; do not mark entire groups complete after a screenshot.
 | USB/internal folder source and remount | mount helper/udev | Retained; native picker pending |
 | SMB/NFS NAS setup/retry/rescan | NetworkManager/storage backend | Retained; native NAS form implemented, mounting/recovery untested |
 | USB DAC, HDMI, analog, Pi I2S HAT | ALSA, overlays; known Pi gaps | Retained; capability UI/hardware pending |
-| Device/mixer selection and reboot warning | audio_output + helper | Native async form, hardware apply not tested |
+| Device/mixer selection and reboot warning | audio_output + helper | Native async appliance form. The Mac preview shows the actual CoreAudio system output and can select another Mac device explicitly. Linux hardware apply remains untested. |
 | AirPlay / Bluetooth receiver toggles | services/BlueALSA/Shairport | Native service toggles implemented; actual receivers untested |
 | Pairing / now-playing / source arbitration | Discoverability exists; missing manager | Existing gap; backend/native work pending |
 | Wi-Fi scan/connect, AP recovery, status | NetworkManager worker/cache | Native form/scan/hotspot controls, hardware handoff pending |

@@ -21,8 +21,6 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QUrl api, bool demo = false, bool reduced = false);
     CoverFlowWidget *coverFlow() const { return m_flow; }
-signals:
-    void favouritesChanged();
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 private:
@@ -48,6 +46,8 @@ private:
     void placeOverlays();
     void refreshFavourites();
     void updateFavouriteHearts();
+    void syncCaptionHeart();
+    QPair<QString, bool> captionFavouriteSubject() const;
     void toggleFavourite(const QString &id, bool album);
     void showCaptionActions();
     void showSubjectActions(const QPoint &anchor, const Album &album, const Track &track,
@@ -67,6 +67,7 @@ private:
     QLabel *m_message, *m_time;
     QToolButton *m_play, *m_repeat, *m_shuffle, *m_volumeButton;
     QToolButton *m_captionActions;
+    QToolButton *m_captionHeart;
     QFrame *m_searchPanel, *m_transportPanel;
     QSlider *m_seek, *m_volume, *m_albumStrip;
     QTimer m_poll, m_searchDelay, m_snapBack;

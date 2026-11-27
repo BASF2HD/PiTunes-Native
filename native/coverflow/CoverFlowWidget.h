@@ -15,7 +15,7 @@ class CoverFlowWidget : public QWidget {
 public:
     CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWidget *parent = nullptr);
     int currentIndex() const { return m_target; }
-    double visualPosition() const { return m_motion.position; }
+    double visualPosition() const { return m_visualPosition; }
     void select(int index, bool animate = true);
     void setReducedMotion(bool reduced);
     bool reducedMotion() const { return m_reduced; }
@@ -25,6 +25,7 @@ public:
     QRect centreCoverRect() const;
     QRect captionRect() const;
     int captionAlbumIndex() const { return m_captionRow; }
+    bool captionShowsPlayback() const { return m_captionShowsPlayback; }
     void setTransportInset(int pixels);
     CaptionFontSizes captionFontSizes() const { return m_captionFontSizes; }
     void setCaptionFontSizes(CaptionFontSizes sizes);
@@ -36,6 +37,7 @@ signals:
     void navigationSettled();
     void artworkBackdropChanged();
     void captionLayoutChanged();
+    void captionChanged();
     void activated(int index);
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -50,23 +52,22 @@ private:
     void prefetch();
     void sampleMotion();
     void settle();
-    void moveTo(double position, bool animate, double response, bool trackpad = false);
+    CoverPose poseAt(int row) const;
     void updateCaption();
     void updateCaptionLayout();
     void paintCovers(QPainter &painter, double size, double top,
                      QVector<QPair<int, QPolygonF>> *hits = nullptr) const;
     double coverSize() const;
+    double coverTop() const { return height() * .012; }
     QPair<int, int> visibleRows(double position) const;
     LibraryModel *m_model;
     ArtworkCache *m_artwork;
     QTimer m_timer;
-    QTimer m_trackpadIdle;
+    QTimer m_wheelIdle;
     QElapsedTimer m_clock;
-    CoverMotion m_motion, m_start;
-    double m_goal = 0., m_response = 15.;
+    QHash<int, CoverPose> m_startPoses;
+    double m_visualPosition = 0., m_startPosition = 0., m_seconds = 0.;
     double m_wheelRemainder = 0;
-    bool m_trackpadActive = false;
-    bool m_trackpadMotion = false;
     int m_target = 0;
     int m_captionRow = -1;
     bool m_reduced = false, m_dragging = false;

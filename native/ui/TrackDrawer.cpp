@@ -24,7 +24,7 @@ namespace {
 enum TrackRole { SubtitleRole = Qt::UserRole + 1, NumberRole, DurationRole, FileRole, FavouriteRole };
 constexpr int rowHeight = 45;
 constexpr int numberWidth = 34;
-constexpr int durationWidth = 56;
+constexpr int durationWidth = 43;
 constexpr int favouriteWidth = 32;
 constexpr int actionsWidth = 36;
 constexpr int textInset = 8;
@@ -143,7 +143,7 @@ public:
         painter->drawText(QRect(trailing - durationWidth, row.top(), durationWidth - 5, row.height()),
                           Qt::AlignRight | Qt::AlignVCenter, index.data(DurationRole).toString());
         playerIcon(PlayerIcon::More).paint(painter, QRect(trailing + 10, row.center().y() - 8, 16, 16));
-        const auto heart = favouriteRect(row).center();
+        const auto heart = favouriteRect(row).center() + QPoint(4, 0);
         const bool hasFile = !index.data(FileRole).toString().isEmpty();
         const auto icon = index.data(FavouriteRole).toBool() ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite;
         playerIcon(icon).paint(painter, QRect(heart - QPoint(8, 8), QSize(16, 16)), Qt::AlignCenter,
@@ -205,7 +205,7 @@ private:
 
 TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QString &year,
                          const QVector<Track> &tracks, bool albumContext)
-    : FrostedPanel(stage, QColor(10, 10, 20, 200), 29), m_stage(stage), m_heading(albumWithYear(title, year)) {
+    : FrostedPanel(stage, QColor(10, 10, 20, 221), 29), m_stage(stage), m_heading(albumWithYear(title, year)) {
     setObjectName("trackDrawer");
     setAccessibleName(m_heading);
     setAttribute(Qt::WA_DeleteOnClose);

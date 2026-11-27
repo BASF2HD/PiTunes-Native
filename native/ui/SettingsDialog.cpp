@@ -1,9 +1,11 @@
 #include "SettingsDialog.h"
+#include "PlayerIcons.h"
 #include "TouchKeyboard.h"
 #include "models/Domain.h"
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDialogButtonBox>
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QFormLayout>
 #include <QFileDialog>
 #include <QFile>
@@ -12,18 +14,139 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTabBar>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
+#include <QWindow>
+#ifdef Q_OS_MACOS
+#include <CoreAudio/CoreAudio.h>
+#include <QHostAddress>
+#endif
 
 namespace PiTunes {
+namespace {
+class SettingsTitleBar : public QWidget {
+public:
+    explicit SettingsTitleBar(QDialog *dialog) : QWidget(dialog), m_dialog(dialog) {
+        setObjectName("settingsTitleBar");
+        setCursor(Qt::SizeAllCursor);
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override {
+        if (event->button() != Qt::LeftButton) return;
+        m_offset = event->globalPos() - m_dialog->pos();
+        auto *window = m_dialog->windowHandle();
+        m_manualMove = !window || !window->startSystemMove();
+        event->accept();
+    }
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if (m_manualMove && (event->buttons() & Qt::LeftButton)) m_dialog->move(event->globalPos() - m_offset);
+    }
+
+private:
+    QDialog *m_dialog;
+    QPoint m_offset;
+    bool m_manualMove = false;
+};
+
+#ifdef Q_OS_MACOS
+constexpr AudioObjectPropertyAddress defaultOutput = {
+    kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+};
+
+void populateMacOutputs(QComboBox *choice) {
+    choice->clear();
+    constexpr AudioObjectID system = kAudioObjectSystemObject;
+    constexpr AudioObjectPropertyAddress devices = {
+        kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+    };
+    UInt32 bytes = 0;
+    if (AudioObjectGetPropertyDataSize(system, &devices, 0, nullptr, &bytes) != noErr ||
+        bytes == 0 || bytes > 4096) return;
+    QVector<AudioDeviceID> ids(bytes / sizeof(AudioDeviceID));
+    if (AudioObjectGetPropertyData(system, &devices, 0, nullptr, &bytes, ids.data()) != noErr) return;
+    AudioDeviceID current = kAudioObjectUnknown;
+    UInt32 currentSize = sizeof(current);
+    AudioObjectGetPropertyData(system, &defaultOutput, 0, nullptr, &currentSize, &current);
+
+    constexpr AudioObjectPropertyAddress streams = {
+        kAudioDevicePropertyStreams, kAudioDevicePropertyScopeOutput, kAudioObjectPropertyElementMain
+    };
+    constexpr AudioObjectPropertyAddress name = {
+        kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+    };
+    for (const auto id : ids) {
+        UInt32 streamBytes = 0;
+        if (AudioObjectGetPropertyDataSize(id, &streams, 0, nullptr, &streamBytes) != noErr || streamBytes == 0) continue;
+        CFStringRef label = nullptr;
+        UInt32 labelSize = sizeof(label);
+        if (AudioObjectGetPropertyData(id, &name, 0, nullptr, &labelSize, &label) != noErr || !label) continue;
+        QByteArray utf8(int(CFStringGetMaximumSizeForEncoding(CFStringGetLength(label), kCFStringEncodingUTF8)) + 1, '\0');
+        if (CFStringGetCString(label, utf8.data(), utf8.size(), kCFStringEncodingUTF8))
+            choice->addItem(QString::fromUtf8(utf8.constData()), uint(id));
+        CFRelease(label);
+    }
+    choice->setCurrentIndex(choice->findData(uint(current)));
+}
+#endif
+}
+
 SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *parent) : QDialog(parent) {
-    setWindowTitle("PiTunes Settings"); resize(760, 620);
-    auto *layout = new QVBoxLayout(this);
-    auto *tabs = new QTabWidget(this); layout->addWidget(tabs, 1);
+    setWindowTitle("Application settings"); resize(650, 490);
+    setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground);
+    setObjectName("applicationSettings");
+    setStyleSheet(
+        "QDialog#applicationSettings { background: transparent; }"
+        "QFrame#settingsSurface { background: #12151d; border: 1px solid #343b49; border-radius: 13px; }"
+        "QWidget#settingsTitleBar, QLabel, QWidget#settingsPage { background: transparent; }"
+        "QLabel#settingsHeading { color: #f2f4fb; font-size: 17px; font-weight: 600; }"
+        "QTabWidget, QTabBar, QStackedWidget { background: transparent; border: 0; }"
+        "QTabWidget::pane { border: 0; background: transparent; }"
+        "QTabBar::tab { color: #aeb6c6; background: transparent; border: 0;"
+        "padding: 7px 11px; margin-right: 4px; border-radius: 6px; }"
+        "QTabBar::tab:selected { color: white; background: #343d50; border: 0; }"
+        "QTabBar::tab:hover:!selected { color: white; background: #252b38; }"
+        "QToolButton#settingsClose { background: #212734; border: 0; border-radius: 14px; }"
+        "QToolButton#settingsClose:hover, QToolButton#settingsClose:focus { background: #414a5c; }"
+        "QSpinBox, QComboBox, QPushButton { color: white; background: #202631; padding: 4px; "
+        "border: 1px solid #404a5c; border-radius: 5px; }"
+        "QPushButton:hover, QPushButton:focus { border-color: #8393b0; }");
+    auto *outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    auto *surface = new QFrame(this);
+    surface->setObjectName("settingsSurface");
+    outer->addWidget(surface);
+    auto *layout = new QVBoxLayout(surface);
+    layout->setContentsMargins(15, 11, 15, 15);
+    auto *titleBar = new SettingsTitleBar(this);
+    auto *titleLayout = new QHBoxLayout(titleBar);
+    titleLayout->setContentsMargins(0, 0, 0, 3);
+    auto *titleText = new QLabel(windowTitle(), titleBar);
+    titleText->setObjectName("settingsHeading");
+    titleText->setAttribute(Qt::WA_TransparentForMouseEvents);
+    titleLayout->addWidget(titleText, 1);
+    auto *close = new QToolButton(titleBar);
+    close->setObjectName("settingsClose");
+    close->setAccessibleName("Close settings");
+    close->setToolTip(close->accessibleName());
+    close->setIcon(playerIcon(PlayerIcon::Close));
+    close->setFixedSize(28, 28);
+    close->setCursor(Qt::ArrowCursor);
+    titleLayout->addWidget(close);
+    connect(close, &QToolButton::clicked, this, &QDialog::reject);
+    layout->addWidget(titleBar);
+    auto *tabs = new QTabWidget(surface);
+    tabs->setDocumentMode(true);
+    tabs->tabBar()->setDrawBase(false);
+    layout->addWidget(tabs, 1);
     auto *status = new QLabel(this); status->setWordWrap(true); layout->addWidget(status);
     auto *keyboard = new TouchKeyboard(this); layout->addWidget(keyboard);
     QPointer<SettingsDialog> guard(this);
@@ -33,7 +156,11 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     };
     auto page = [tabs](const QString &title) {
         auto *widget = new QWidget(tabs); tabs->addTab(widget, title);
-        auto *form = new QFormLayout(widget); form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow); return form;
+        widget->setObjectName("settingsPage");
+        auto *form = new QFormLayout(widget);
+        form->setContentsMargins(3, 10, 3, 3);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        return form;
     };
     auto field = [keyboard](QFormLayout *form, const QString &label, bool secret = false) {
         auto *edit = new QLineEdit; if (secret) edit->setEchoMode(QLineEdit::Password);
@@ -78,12 +205,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         preview();
     });
     reset->setMaximumWidth(170);
-    auto *close = new QDialogButtonBox(QDialogButtonBox::Close, this);
-    connect(close, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    if (!api) {
-        layout->addWidget(close);
-        return;
-    }
+    if (!api) return;
 
     auto *library = page("Library");
     auto *music = field(library, "Music folder");
@@ -113,35 +235,69 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     });
 
     auto *audio = page("Audio");
-    auto *route = new QComboBox; auto *device = new QComboBox; auto *hat = new QComboBox;
-    auto *mixer = new QComboBox; mixer->addItems({"software", "hardware", "none"});
-    audio->addRow("Output", route); audio->addRow("ALSA device", device); audio->addRow("Pi DAC HAT", hat); audio->addRow("Mixer", mixer);
-    api->get("/api/audio/devices", [guard, route, device, hat, mixer, result](QJsonObject o, QString error) {
-        if (!guard) return;
-        if (!error.isEmpty()) { result(o, error); return; }
-        for (const auto &v : o["routes"].toArray()) {
-            const auto r = v.toObject();
-            route->addItem(r.isEmpty() ? textValue(v) : textValue(r["label"]), r.isEmpty() ? textValue(v) : textValue(r["id"]));
-        }
-        device->addItem("ALSA default", "default");
-        for (const auto &v : o["devices"].toArray()) { const auto d = v.toObject(); device->addItem(textValue(d["label"]), textValue(d["alsa"])); }
-        for (const auto &v : o["hats"].toArray()) { const auto h = v.toObject(); hat->addItem(textValue(h["label"]), textValue(h["id"])); }
-        hat->setEnabled(hat->count() > 0);
-        const auto current = o["current"].toObject();
-        for (auto pair : {qMakePair(route, QString("route")), qMakePair(device, QString("device")), qMakePair(hat, QString("dac_hat"))}) {
-            const int i = pair.first->findData(textValue(current[pair.second])); if (i >= 0) pair.first->setCurrentIndex(i);
-        }
-        mixer->setCurrentText(textValue(current["mixer"]));
-    });
-    button(audio, "Apply output", [=] {
-        api->post("/api/audio/output", {{"output", route->currentData().toString()}, {"alsa", device->currentData().toString()},
-            {"dac_hat", hat->currentData().toString()}, {"mixer", mixer->currentText()}},
-            [guard, result](QJsonObject o, QString error) {
-                result(o, error);
-                if (guard && error.isEmpty() && boolValue(o["reboot_required"]))
-                    QMessageBox::information(guard, "Audio output", "Output saved. Restart the appliance to complete this change.");
-            }, 90000);
-    });
+    const auto setupApplianceAudio = [=] {
+        auto *route = new QComboBox; auto *device = new QComboBox; auto *hat = new QComboBox;
+        auto *mixer = new QComboBox; mixer->addItems({"software", "hardware", "none"});
+        audio->addRow("Output", route); audio->addRow("ALSA device", device); audio->addRow("Pi DAC HAT", hat); audio->addRow("Mixer", mixer);
+        api->get("/api/audio/devices", [guard, route, device, hat, mixer, result](QJsonObject o, QString error) {
+            if (!guard) return;
+            if (!error.isEmpty()) { result(o, error); return; }
+            for (const auto &v : o["routes"].toArray()) {
+                const auto r = v.toObject();
+                route->addItem(r.isEmpty() ? textValue(v) : textValue(r["label"]), r.isEmpty() ? textValue(v) : textValue(r["id"]));
+            }
+            device->addItem("ALSA default", "default");
+            for (const auto &v : o["devices"].toArray()) { const auto d = v.toObject(); device->addItem(textValue(d["label"]), textValue(d["alsa"])); }
+            for (const auto &v : o["hats"].toArray()) { const auto h = v.toObject(); hat->addItem(textValue(h["label"]), textValue(h["id"])); }
+            hat->setEnabled(hat->count() > 0);
+            const auto current = o["current"].toObject();
+            for (auto pair : {qMakePair(route, QString("route")), qMakePair(device, QString("device")), qMakePair(hat, QString("dac_hat"))}) {
+                const int i = pair.first->findData(textValue(current[pair.second])); if (i >= 0) pair.first->setCurrentIndex(i);
+            }
+            mixer->setCurrentText(textValue(current["mixer"]));
+        });
+        button(audio, "Apply output", [=] {
+            api->post("/api/audio/output", {{"output", route->currentData().toString()}, {"alsa", device->currentData().toString()},
+                {"dac_hat", hat->currentData().toString()}, {"mixer", mixer->currentText()}},
+                [guard, result](QJsonObject o, QString error) {
+                    result(o, error);
+                    if (guard && error.isEmpty() && boolValue(o["reboot_required"]))
+                        QMessageBox::information(guard, "Audio output", "Output saved. Restart the appliance to complete this change.");
+                }, 90000);
+        });
+    };
+#ifdef Q_OS_MACOS
+    const auto host = api->baseUrl().host();
+    if (host == "localhost" || QHostAddress(host).isLoopback()) {
+        auto *checking = new QLabel("Checking sound output…");
+        audio->addRow(checking);
+        api->get("/api/system/info", [=](QJsonObject info, QString error) {
+            if (!guard) return;
+            audio->removeRow(checking);
+            if (!error.isEmpty() || textValue(info["os"].toObject()["name"]) != "Darwin") {
+                setupApplianceAudio();
+                return;
+            }
+            auto *outputs = new QComboBox;
+            outputs->setObjectName("macSoundOutput");
+            audio->addRow("Mac sound output", outputs);
+            auto *description = new QLabel("Preview playback follows the Mac’s system sound output.");
+            description->setWordWrap(true);
+            audio->addRow(description);
+            populateMacOutputs(outputs);
+            auto *apply = button(audio, "Use as Mac sound output", [=] {
+                const auto device = AudioDeviceID(outputs->currentData().toUInt());
+                const auto error = AudioObjectSetPropertyData(kAudioObjectSystemObject, &defaultOutput, 0, nullptr,
+                                                               sizeof(device), &device);
+                populateMacOutputs(outputs);
+                result({}, error == noErr ? QString() : QString("Could not change the Mac sound output."));
+            });
+            apply->setEnabled(outputs->currentIndex() >= 0);
+            connect(outputs, QOverload<int>::of(&QComboBox::currentIndexChanged), apply, [apply](int row) { apply->setEnabled(row >= 0); });
+        });
+    } else
+#endif
+    setupApplianceAudio();
 
     auto *network = page("Network");
     auto *netStatus = new QLabel; netStatus->setWordWrap(true); network->addRow(netStatus);
@@ -216,6 +372,5 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
                 api->post("/api/system/control", {{"action", action}}, result);
         });
     }
-    layout->addWidget(close);
 }
 }

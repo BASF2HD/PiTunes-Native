@@ -79,8 +79,11 @@ QPixmap renderIcon(PlayerIcon icon, const QColor &color) {
         for (int y : {7, 12, 17}) stroke({{4., double(y)}, {20., double(y)}});
         break;
     case PlayerIcon::Albums:
-        circle({12, 12}, 8., false);
-        circle({12, 12}, 2.3, true);
+        stroke({{8., 3.}, {19., 3.}, {21., 5.}, {21., 16.}});
+        stroke({{6., 6.}, {16., 6.}, {18., 8.}, {18., 18.}});
+        painter.setPen(line);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(QRectF(3, 9, 12.5, 12.5), 1.7, 1.7);
         break;
     case PlayerIcon::Songs:
         stroke({{8, 17}, {8, 6}, {20, 4}, {20, 15}});
