@@ -97,7 +97,7 @@ private slots:
         window.show();
         auto *flow = window.coverFlow();
         QTRY_COMPARE(flow->visibleCoverCount(), 2);
-        const QString caption = "The song\nThe singer\nPlaying album (1983)";
+        const QString caption = "The song\nThe singer\nPlaying album | 1983";
         QTRY_COMPARE(flow->accessibleDescription(), caption);
         flow->select(1, false);
         QCOMPARE(flow->accessibleDescription(), caption);
@@ -123,7 +123,7 @@ private slots:
         QTRY_VERIFY(window.findChild<TrackDrawer *>());
         auto *drawer = window.findChild<TrackDrawer *>();
         QCOMPARE(drawer->parentWidget(), flow);
-        QCOMPARE(drawer->accessibleName(), QString("Album (1986)"));
+        QCOMPARE(drawer->accessibleName(), QString("Album | 1986"));
         auto *list = drawer->findChild<QListView *>();
         const auto second = list->model()->index(1, 0);
         QVERIFY(second.data(Qt::AccessibleTextRole).toString().contains("Singer Two"));
@@ -345,7 +345,7 @@ private slots:
         QCOMPARE(widget.currentIndex(), 2);
         QTRY_VERIFY(!widget.animating());
     }
-    void coverStackFitsViewportAndSharesBaseline() {
+    void coverStackFitsViewport() {
         HttpFixture server;
         ApiClient api(server.url());
         LibraryModel library(&api);
@@ -361,16 +361,49 @@ private slots:
         QCOMPARE(widget.visibleCoverCount(), narrowCount);
         QCOMPARE(widget.currentIndex(), 7);
 
-        widget.resize(800, 400);
-        const auto frame = widget.grab().toImage();
-        const auto pixel = [&frame](int x, int y) {
-            return frame.pixelColor(qRound(x * frame.devicePixelRatio()), qRound(y * frame.devicePixelRatio()));
-        };
-        // With no reflection in demo mode, all three covers end at y=274.
-        // Test the centre and both ends of each tilted neighbour's exposed area.
-        for (int x : {190, 262, 400, 538, 610}) {
-            QVERIFY(pixel(x, 271) != QColor(Qt::black));
-            QCOMPARE(pixel(x, 279), QColor(Qt::black));
+    }
+    void firstNeighboursTurnAndReflectOnTheSameFloor() {
+        const auto centre = projectCover(0., 100., {});
+        const auto right = projectCover(1., 100., {});
+        const auto left = projectCover(-1., 100., {});
+        QVERIFY(right.face[0].x() < centre.face[1].x());
+        QVERIFY(right.face[1].x() - centre.face[1].x() > 60.);
+        QVERIFY(right.face[2].y() > 97. && right.face[2].y() < 100.);
+        QVERIFY(right.face[3].y() < 88.);
+        QCOMPARE(right.face[2].y(), left.face[3].y());
+        QCOMPARE(right.face[3].y(), left.face[2].y());
+        for (const auto &card : {left, centre, right}) {
+            for (const int edge : {0, 1}) {
+                const auto foot = card.face[3 - edge];
+                const auto reflection = card.reflection[edge];
+                QCOMPARE(reflection.x(), foot.x());
+                QVERIFY(reflection.y() > foot.y() && reflection.y() - foot.y() < 1.);
+                const double height = card.face[3 - edge].y() - card.face[edge].y();
+                const double reflectedHeight = card.reflection[3 - edge].y() - reflection.y();
+                QVERIFY(qAbs(reflectedHeight / height - .5) < .001);
+            }
+        }
+        // At the depth-order crossover the two faces have room to pass.
+        const auto departing = projectCover(-.5, 100., {});
+        const auto arriving = projectCover(.5, 100., {});
+        const double gap = arriving.face[0].x() - departing.face[1].x();
+        QVERIFY(gap > 4. && gap < 12.);
+    }
+    void retargetingPreservesCoverVelocity() {
+        const CoverMotion resting;
+        const auto firstFrame = advanceCoverMotion(resting, 1., .016);
+        QVERIFY(firstFrame.position > 0. && firstFrame.position < .06);
+        const auto halfway = advanceCoverMotion(resting, 1., .11);
+        QVERIFY(halfway.position > .42 && halfway.position < .55);
+        const auto settled = advanceCoverMotion(resting, 1., .47);
+        QVERIFY(settled.position > .99 && settled.position < 1.);
+        for (const double target : {0., 2.}) {
+            const auto retarget = advanceCoverMotion(halfway, target, 0.);
+            QVERIFY(qAbs(retarget.position - halfway.position) < 1.e-10);
+            QVERIFY(qAbs(retarget.velocity - halfway.velocity) < 1.e-10);
+            const auto next = advanceCoverMotion(halfway, target, .0001);
+            const double velocity = (next.position - halfway.position) / .0001;
+            QVERIFY(qAbs(velocity - halfway.velocity) < .05);
         }
     }
     void nearerReflectionHidesItsNeighbour() {
@@ -406,10 +439,10 @@ private slots:
             return frame.pixelColor(qRound(x * scale), qRound(300 * scale));
         };
         // Red is still visible farther out, but cannot tint the translucent green.
-        QCOMPARE(reflectedPixel(650), QColor(96, 0, 0));
-        QCOMPARE(reflectedPixel(570), QColor(0, 96, 0));
-        QCOMPARE(reflectedPixel(610), reflectedPixel(570));
-        QCOMPARE(reflectedPixel(190), reflectedPixel(230));
+        QCOMPARE(reflectedPixel(710), QColor(96, 0, 0));
+        QCOMPARE(reflectedPixel(545), QColor(0, 96, 0));
+        QCOMPARE(reflectedPixel(630), reflectedPixel(545));
+        QCOMPARE(reflectedPixel(170), reflectedPixel(255));
     }
 };
 QTEST_MAIN(NativeTests)

@@ -85,6 +85,16 @@ deltas and supports retargeting in flight. Checked the drawer at 1280×680, 800�
 and 480×800 and inspected a native transition frame sequence. Debug and Release
 passed all 22 native cases. Hardware motion quality remains unmeasured.
 
+Revised the projection after inspecting 40 consecutive frames of a 60 fps
+reference transition and comparing ten timed native frames. At rest the first
+side cover exposes about 63% of the centre cover's width. Its outer edge is
+about 96% of the centre height and its inner edge is about 64%. Cover faces
+and reflections now use the same perspective, with a small clearance between
+the two passing faces. Navigation carries velocity on a path with continuous
+spacing. Reflection overlap remains masked. The caption and drawer format
+the date as `Album | Year`. Debug and Release passed 24 native cases, including
+reflection masking, first-neighbour geometry and velocity continuity.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

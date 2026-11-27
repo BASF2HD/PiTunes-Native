@@ -84,7 +84,10 @@ Artwork ArtworkCache::decode(const QByteArray &data, int size) {
     QPainter painter(&result.reflection);
     painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
     QLinearGradient fade(0, 0, 0, result.reflection.height());
-    fade.setColorAt(0, QColor(0, 0, 0, 95)); fade.setColorAt(1, QColor(0, 0, 0, 0));
+    fade.setColorAt(0, QColor(0, 0, 0, 95));
+    fade.setColorAt(.40, QColor(0, 0, 0, 78));
+    fade.setColorAt(.66, QColor(0, 0, 0, 61));
+    fade.setColorAt(1, QColor(0, 0, 0, 0));
     painter.fillRect(result.reflection.rect(), fade);
     return result;
 }

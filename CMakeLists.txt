@@ -11,7 +11,7 @@ include(CTest)
 add_library(pitunes-core
   native/models/Domain.cpp native/models/LibraryModel.cpp
   native/networking/ApiClient.cpp native/artwork/ArtworkCache.cpp
-  native/coverflow/CoverFlowWidget.cpp)
+  native/coverflow/CoverFlowGeometry.cpp native/coverflow/CoverFlowWidget.cpp)
 target_include_directories(pitunes-core PUBLIC native)
 target_link_libraries(pitunes-core PUBLIC Qt5::Widgets Qt5::Network Qt5::Concurrent Qt5::Svg)
 target_compile_options(pitunes-core PRIVATE -Wall -Wextra -Wpedantic)

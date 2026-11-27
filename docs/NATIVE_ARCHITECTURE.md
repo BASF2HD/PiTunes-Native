@@ -19,12 +19,11 @@ dependencies; no functioning GPU is required by the app's painting code.
   QThreadPool scales/decodes and generates reflections off GUI thread. Compressed
   response <=4 MiB, reject source art above four megapixels, normal output 320 px (256 px on low-memory profiles).
   Plugin transient buffers are additional to cached-byte budget.
-- `coverflow/CoverFlowWidget`: viewport-based cover count, QTransform projection,
-  aligned bottom edges and cached reflections. The normal artwork budget allows up
-  to 19 visible covers and the low-memory profile allows up to 15. Slide, turn
-  and scale ease separately and resume from the current motion on new input.
-  Timers run only during navigation. Fine-grained dirty rectangles remain an
-  optimization.
+- `coverflow/CoverFlowWidget`: viewport-based cover count, QTransform projection
+  and cached reflections. The normal artwork budget allows up to 19 visible
+  covers and the low-memory profile allows up to 15. Cover and reflection corners
+  share one perspective model. Scroll retargeting carries the current velocity
+  into the next movement. Timers run only during navigation.
 - `ui/TrackDrawer`: a native overlay aligned with the centre cover, with virtual
   track rows, per-song artist, duration, playback marker and row actions. It
   leaves space for the shared playback caption on smaller displays.

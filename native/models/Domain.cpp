@@ -1,4 +1,5 @@
 #include "Domain.h"
+#include <QRegularExpression>
 #include <QtMath>
 #include <cmath>
 
@@ -51,10 +52,15 @@ QString timeLabel(double seconds) {
 }
 QString albumWithYear(const QString &title, const QString &year) {
     const auto album = title.trimmed();
-    const auto releaseYear = year.trimmed();
-    if (album.isEmpty() || releaseYear.isEmpty()) return album;
-    const QString suffix = "(" + releaseYear + ")";
-    if (album.endsWith(suffix) || album.endsWith("[" + releaseYear + "]")) return album;
-    return album + " " + suffix;
+    if (album.isEmpty()) return album;
+    static const QRegularExpression packagedYear(R"(\s*(?:\(((?:18|19|20|21)\d{2})\)|\[((?:18|19|20|21)\d{2})\]|\|\s*((?:18|19|20|21)\d{2}))$)");
+    const auto match = packagedYear.match(album);
+    auto releaseYear = year.trimmed();
+    auto name = album;
+    if (match.hasMatch() && match.capturedStart() > 0) {
+        name = album.left(match.capturedStart()).trimmed();
+        if (releaseYear.isEmpty()) releaseYear = match.captured(match.lastCapturedIndex());
+    }
+    return releaseYear.isEmpty() ? name : name + " | " + releaseYear;
 }
 } // namespace PiTunes

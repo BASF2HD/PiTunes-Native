@@ -13,13 +13,13 @@ with tests; do not mark entire groups complete after a screenshot.
 | Full-text search | SQLite FTS5, fallback | Native debounced album search; Enter opens matching songs, server limit 120 |
 | Scan progress, incremental rescan, cache rebuild | scanner/art resolver | Rescan/rebuild controls; progress presentation pending |
 | Artwork, missing/corrupt fallback | backend 128/420 thumbnails | Async bounded native cache/reflections/fallback, decode/LRU/jobs tested |
-| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter fits neighbours to the viewport with an aligned bottom edge and masked reflections. Slide, turn and scale have separate easing. Resize, navigation, reflection and idle tests passed. Exact visual parity pending. |
+| Classic CoverFlow, reflections, selected focus | Three.js/GSAP, original screenshot | QPainter projects covers and reflections from a shared floor. The side edges recede towards the centre, and the slide carries velocity across scroll inputs. Resize, geometry, reflection and idle tests passed. |
 | Mouse, wheel, keyboard, touchscreen, drag | web event handlers | Native handlers implemented; keyboard QTest passed; physical touch pending |
 | Album/song direct playback | ID/file routes, fast start/full prefix | Native submits exact file/full album URI queue; MPD hardware pending |
 | Play / pause / stop / previous / next | MPD API | Native async intents, bounded serialization; real HTTP fixture transport tests |
 | Seek / volume / duration / elapsed | MPD; volume -1 means no mixer | Native sliders/status implemented; mixed types/no-mixer tested |
 | Repeat Off/All/Song, shuffle | MPD single/repeat/random, radio rejection | Native controls; original semantic tests retained; real MPD pending |
-| Queue and now-playing metadata | MPD, per-track artist/album/year | One caption below the centre cover shows the playing song, singer and album/year while browsing. Queue editing remains pending. |
+| Queue and now-playing metadata | MPD, per-track artist/album/year | One caption below the centre cover shows the playing song, singer and `Album \| Year` while browsing. Queue editing remains pending. |
 | Automatic next album without UI | idle watcher + backup poller | Backend retained; native must not duplicate. Native browse-context publication is still missing, so continuation sort/filter can differ |
 | Favourite songs / albums | userdata JSON, optimistic rollback | Basic native save/remove song and save album; album removal/optimistic UI pending |
 | Playlists create/add/browse/order | JSON trackIds, bulk one-write | Native create/browse/stored order; add-to-existing native UI pending |

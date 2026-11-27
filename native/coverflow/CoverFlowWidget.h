@@ -1,5 +1,6 @@
 #pragma once
 #include "artwork/ArtworkCache.h"
+#include "coverflow/CoverFlowGeometry.h"
 #include "models/LibraryModel.h"
 #include <QElapsedTimer>
 #include <QPolygonF>
@@ -34,22 +35,16 @@ protected:
     void mouseReleaseEvent(QMouseEvent *) override;
     bool event(QEvent *) override;
 private:
-    struct Motion {
-        double slide = 0;
-        double turn = 0;
-        double scale = 0;
-    };
     void prefetch();
     void sampleMotion();
     void settle();
     double coverSize() const;
     QPair<int, int> visibleRows(double position) const;
-    QPolygonF polygon(int row, double size, double top) const;
     LibraryModel *m_model;
     ArtworkCache *m_artwork;
     QTimer m_timer;
     QElapsedTimer m_clock;
-    Motion m_motion, m_start;
+    CoverMotion m_motion, m_start;
     double m_wheelRemainder = 0;
     int m_target = 0;
     bool m_reduced = false, m_dragging = false;

@@ -9,18 +9,16 @@
 
 namespace PiTunes {
 namespace {
-constexpr double sideHalfWidth = .20;
-constexpr double centreOverlap = .02;
-constexpr double firstSideOffset = .5 + sideHalfWidth - centreOverlap;
-constexpr double sideSpacing = .27;
-constexpr double slideMs = 420;
-constexpr double turnMs = 280;
-constexpr double scaleMs = 320;
-constexpr double sideAngle = 52. * 3.141592653589793 / 180.;
-
-double easeOut(double elapsed, double duration) {
-    const double remaining = 1. - qMin(1., elapsed / duration);
-    return 1. - remaining * remaining;
+void drawProjected(QPainter &painter, const QImage &image, const QPolygonF &quad) {
+    if (image.isNull()) return;
+    const QPolygonF source({QPointF(0, 0), QPointF(image.width(), 0),
+        QPointF(image.width(), image.height()), QPointF(0, image.height())});
+    QTransform projection;
+    if (!QTransform::quadToQuad(source, quad, projection)) return;
+    painter.save();
+    painter.setTransform(projection, true);
+    painter.drawImage(QPointF(0, 0), image);
+    painter.restore();
 }
 }
 
@@ -36,7 +34,7 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
 #endif
     connect(&m_timer, &QTimer::timeout, this, [this] {
         sampleMotion();
-        if (m_clock.elapsed() >= slideMs) settle();
+        if (std::abs(m_motion.position - m_target) < .0015 && std::abs(m_motion.velocity) < .023) settle();
         update();
     });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
@@ -51,11 +49,11 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     connect(artwork, &ArtworkCache::ready, this, [this](const QString &) { update(); });
 }
 int CoverFlowWidget::visibleCoverCount() const {
-    const auto [first, last] = visibleRows(m_motion.slide);
+    const auto [first, last] = visibleRows(m_motion.position);
     return qMax(0, last - first + 1);
 }
 double CoverFlowWidget::coverSize() const {
-    return qMin(width() * .33, qMin(height() * .65, height() * .965 - 58.));
+    return qMax(1., qMin(width() * .40, qMin(height() * .65, height() * .965 - 58.)));
 }
 QRect CoverFlowWidget::centreCoverRect() const {
     const double size = coverSize();
@@ -65,7 +63,7 @@ QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     // Cull once a cover's inner edge leaves the viewport. Fractional positions
     // let edge covers slide out naturally during navigation.
     const double halfViewport = width() / (2. * coverSize());
-    const double screenReach = 1. + (halfViewport - (firstSideOffset - sideHalfWidth)) / sideSpacing;
+    const double screenReach = coverReach(halfViewport);
     const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
     const double reach = qMin(screenReach, double(cacheReach));
     return {qMax(0, int(std::ceil(position - reach))),
@@ -86,19 +84,17 @@ void CoverFlowWidget::select(int index, bool animate) {
     emit selectionChanged(index);
 }
 void CoverFlowWidget::sampleMotion() {
-    const double elapsed = m_clock.elapsed();
-    const auto interpolate = [this, elapsed](double start, double duration) {
-        return start + (m_target - start) * easeOut(elapsed, duration);
-    };
-    m_motion.slide = interpolate(m_start.slide, slideMs);
-    // During a long jump the covers passing through the centre still turn with
-    // the viewport. The faster tracks can lead it only by part of one cover.
-    m_motion.turn = qBound(m_motion.slide - .35, interpolate(m_start.turn, turnMs), m_motion.slide + .35);
-    m_motion.scale = qBound(m_motion.slide - .24, interpolate(m_start.scale, scaleMs), m_motion.slide + .24);
+    m_motion = advanceCoverMotion(m_start, m_target, m_clock.nsecsElapsed() / 1.e9);
+    const double last = qMax(0, m_model->rowCount() - 1);
+    if (m_motion.position < 0. || m_motion.position > last) {
+        m_motion = {qBound(0., m_motion.position, last), 0.};
+        m_start = m_motion;
+        m_clock.restart();
+    }
 }
 void CoverFlowWidget::settle() {
     m_timer.stop();
-    m_motion = {double(m_target), double(m_target), double(m_target)};
+    m_motion = {double(m_target), 0.};
     prefetch();
 }
 void CoverFlowWidget::setReducedMotion(bool reduced) {
@@ -146,22 +142,6 @@ void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     prefetch();
 }
-QPolygonF CoverFlowWidget::polygon(int row, double size, double top) const {
-    const double distance = row - m_motion.slide;
-    const double sign = distance < 0 ? -1 : 1;
-    const double t = qMin(1., std::abs(distance));
-    const double yaw = sideAngle * qBound(-1., row - m_motion.turn, 1.);
-    const double squeeze = (1. - std::cos(yaw)) / (1. - std::cos(sideAngle));
-    const double reduced = size * (1. - .16 * qMin(1., std::abs(row - m_motion.scale)));
-    const double halfWidth = size * (.5 + (sideHalfWidth - .5) * squeeze);
-    // The centre is painted last at rest, hiding the inner edge of each neighbour.
-    const double x = width() / 2. + sign * size * (t * firstSideOffset + qMax(0., std::abs(distance) - 1.) * sideSpacing);
-    const double baseline = top + size;
-    const double y = baseline - reduced;
-    const double skew = -size * .065 * std::sin(yaw) / std::sin(sideAngle);
-    return QPolygonF({QPointF(x - halfWidth, y - skew), QPointF(x + halfWidth, y + skew),
-                      QPointF(x + halfWidth, baseline), QPointF(x - halfWidth, baseline)});
-}
 void CoverFlowWidget::paintEvent(QPaintEvent *) {
     ++m_paints;
     QPainter painter(this);
@@ -174,50 +154,58 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         painter.drawText(rect(), Qt::AlignCenter, m_model->loading() ? "Loading library…" : "No albums · choose a source in Settings");
         return;
     }
-    const auto [first, last] = visibleRows(m_motion.slide);
+    const auto [first, last] = visibleRows(m_motion.position);
     QVector<int> rows;
     for (int i = first; i <= last; ++i) rows.append(i);
     std::sort(rows.begin(), rows.end(), [this](int a, int b) {
-        const auto da = std::abs(a - m_motion.slide);
-        const auto db = std::abs(b - m_motion.slide);
+        const auto da = std::abs(a - m_motion.position);
+        const auto db = std::abs(b - m_motion.position);
         if (da == db) return b == m_target && a != m_target;
         return da > db;
     });
     const double size = coverSize();
     const double top = height() * .035;
+    const QPointF origin(width() / 2., top);
+    struct Card {
+        int row;
+        CoverQuads quads;
+        const Artwork *art;
+    };
+    QVector<Card> cards;
+    cards.reserve(rows.size());
     for (int row : rows) {
-        const auto &album = *m_model->album(row);
-        const auto poly = polygon(row, size, top);
-        const auto *art = m_artwork->find(album.artUrl);
-        const QRectF reflection(poly[3] + QPointF(0, 3), poly[2] + QPointF(0, size * .44));
-        // Draw back to front. The nearer footprint replaces any farther
-        // reflection so its vertical fade blends only with the black floor.
-        painter.fillRect(reflection, Qt::black);
-        if (art && !art->cover.isNull()) {
-            painter.drawImage(reflection, art->reflection);
-            const QPolygonF source({QPointF(0, 0), QPointF(art->cover.width(), 0),
-                QPointF(art->cover.width(), art->cover.height()), QPointF(0, art->cover.height())});
-            QTransform projection;
-            if (QTransform::quadToQuad(source, poly, projection)) {
-                painter.save();
-                painter.setTransform(projection, true);
-                painter.drawImage(QPointF(0, 0), art->cover);
-                painter.restore();
-            }
+        cards.append({row, projectCover(row - m_motion.position, size, origin),
+                      m_artwork->find(m_model->album(row)->artUrl)});
+    }
+
+    // Mask neighbouring reflections back to front. Paint covers in a separate
+    // pass so a sloping reflection never cuts through an adjacent cover face.
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::black);
+    for (const auto &card : cards) {
+        painter.drawPolygon(card.quads.reflection);
+        if (card.art) drawProjected(painter, card.art->reflection, card.quads.reflection);
+    }
+    for (const auto &card : cards) {
+        const auto &album = *m_model->album(card.row);
+        const auto &poly = card.quads.face;
+        if (card.art && !card.art->cover.isNull()) {
+            drawProjected(painter, card.art->cover, poly);
         } else {
-            painter.setBrush(QColor::fromHsv((row * 37 + 210) % 360, 65, 42));
+            painter.setBrush(QColor::fromHsv((card.row * 37 + 210) % 360, 65, 42));
             painter.setPen(QColor("#55555d")); painter.drawPolygon(poly);
             painter.setPen(QColor("#d8d8df"));
             painter.drawText(poly.boundingRect().adjusted(8, 8, -8, -8), Qt::AlignCenter | Qt::TextWordWrap, album.title);
         }
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(album.id == m_playingId ? Qt::white : QColor("#62626b"), row == m_target ? 1.5 : .6));
+        const double focus = 1. - qMin(1., std::abs(card.row - m_motion.position));
+        painter.setPen(QPen(album.id == m_playingId ? Qt::white : QColor("#62626b"), .6 + .9 * focus * focus));
         painter.drawPolygon(poly);
-        m_hits.append({row, poly});
+        m_hits.append({card.row, poly});
     }
     auto caption = m_playingCaption;
     if (caption.isEmpty()) {
-        if (const auto *selected = m_model->album(qRound(m_motion.slide))) {
+        if (const auto *selected = m_model->album(qRound(m_motion.position))) {
             caption << albumWithYear(selected->title, selected->year);
             if (!selected->artist.isEmpty()) caption << selected->artist;
         }

@@ -11,7 +11,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 | ADR-004 | Keep `frontend/` at its existing installed location | Preserve nginx paths, remote playback and backend compatibility; naming alone is not worth breaking contracts. No embedded browser. |
 | ADR-005 | API response adapter, request timeouts, stale-generation guards | Mixed schemas and async races were historical defects. Do not retry mutations; backend already has ambiguous MPD retries. |
 | ADR-006 | Size the visible cover window to the viewport and artwork budget | A wider viewport can show more neighbours. The byte-budgeted LRU and two workers bound memory and decode work on small devices. |
-| ADR-007 | Animate slide, turn and scale independently during navigation | The 420/280/320 ms curves retain the turn-and-settle motion seen in the reference recordings. The Mac timer is 16 ms and Linux uses 33 ms. Reduced motion snaps to the target and the timer stops at rest. |
+| ADR-007 | Carry scroll velocity along a continuous cover path | One damped motion drives the horizontal path and each cover's perspective. Matched slopes join the centre to the side stack. The Mac timer is 16 ms and Linux uses 33 ms. Reduced motion snaps to the target and the timer stops at rest. |
 | ADR-008 | Independent native product/version and disabled OTA | Old source updater cannot install/roll back Qt binaries/dependencies. Neither original feed nor source-only transaction is safe for native devices. |
 | ADR-009 | Preserve original disk/boot mechanics; native build profiles and launcher | Retain BIOS UUID recovery, Pi OS firmware, offline mounts and diagnostics. Do not erase internal disks or replace Pi OS with generic Debian. |
 | ADR-010 | Shared backend smart playlist storage plus explicit browser export/import | Definitions must survive browser removal. Never inspect a running Chromium profile or silently discard unsupported fields. Original data remains intact. |
@@ -19,6 +19,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 | ADR-012 | Separate native GUI recovery from MPD/API | Minimal X11 session, unprivileged GUI, bounded restarts; missing API/network shows a useful shell rather than blocking first paint. |
 
 | ADR-013 | Adapt generated SVG paints in the native artwork worker | Qt 5 SVG Tiny cannot render CSS rgba/patterns. Convert paint to RGB/opacity and omit only the known placeholder dotted overlay, keeping backend/remote output unchanged. |
+| ADR-014 | Project the cover face and its reflection onto a shared floor | A projection makes both foot edges and reflection widths follow the same turn. Mask reflections by cover order, then paint the faces so a reflection cannot erase its neighbour's artwork. |
 
 Do not infer approved native update, image or hardware support from these design
 decisions. Every target requires package, boot, input, audio and resource evidence.
