@@ -121,6 +121,24 @@ The regressions cover fast input continuing to paint, the album strip fetching
 a later page without a playback mutation, caption context and the playing,
 paused and reduced-motion markers.
 
+Reviewed another 46 frames of the supplied 60 fps clip starting at 56.70 s.
+The outgoing blue cover is visibly angled by 56.75 s. The incoming cream cover
+is almost flat at 57.00 s and continues translating toward the centre. Native
+projection now varies the turn by direction of travel, with matching endpoints
+and face/reflection angles. Confirmed mirrored left/right motion and preserved
+clearance as the two faces pass. Physical trackpad feel remains unverified.
+
+The larger cover scene extends behind the transport. The album strip uses a
+translucent track and a thumb inset from both guide lines. The square opaque
+song drawer, overlay search and footer menus were checked with local artwork at
+800×480 and the larger scene at 1280×680. The count appears inside the Albums
+menu. Song and caption actions reuse the favourite and playlist APIs. The idle
+return selects an already loaded playing album after five seconds and waits
+while the user inspects the library. The native regressions cover the timer
+through playback polls, the search geometry, six dropdowns, context actions,
+and the optimistic heart state with API error recovery.
+All 31 native cases passed in Debug and Release using Qt 5.15.19 on macOS.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

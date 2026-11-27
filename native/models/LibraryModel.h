@@ -15,6 +15,8 @@ public:
     void reload(QString filter = {}, QString sort = "year-desc", QString search = {});
     void loadNext();
     int total() const { return m_total; }
+    QString filter() const { return m_filter; }
+    QString sortMode() const { return m_sort; }
     bool loading() const { return m_loading; }
     void setDemo();
 signals:

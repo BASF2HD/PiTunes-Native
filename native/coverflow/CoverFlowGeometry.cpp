@@ -34,18 +34,24 @@ double railOffset(double distance) {
 }
 }
 
-CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double rush) {
+CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double velocity) {
     const double sign = distance < 0 ? -1. : 1.;
     const double offset = std::abs(distance);
     const double t = std::min(1., offset);
-    const double turn = t * t * (3. - 2. * t);
+    const double shoulder = 16. * t * t * (1. - t) * (1. - t);
+    const double direction = sign * velocity / (std::abs(velocity) + .7);
+    // An outgoing cover starts to turn as it leaves the front. An incoming
+    // cover unwinds sooner and finishes with a nearly flat translation.
+    // Both curves join the same resting poses with zero angular slope.
+    const double turn = t * t * (3. - 2. * t) - .16 * direction * shoulder;
     const double yaw = sign * sideYaw * turn;
+    const double rush = carouselAmount(velocity);
     const double centre = sign * (railOffset(offset) - .11 * rush * turn);
     // During a fast pass the front cover remains compact. It opens to its
     // resting size as the rail slows instead of pulsing at every album index.
     const double faceScale = 1. - .28 * rush * (1. - turn);
     // The turning edge comes forward slightly before settling onto the side.
-    const double depth = sideDepth * turn - .075 * 4. * turn * (1. - turn);
+    const double depth = sideDepth * turn - .045 * 4. * turn * (1. - turn);
     const double sine = std::sin(yaw);
     const double cosine = std::cos(yaw);
     const auto point = [&](double x, double y) {

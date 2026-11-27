@@ -20,6 +20,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 
 | ADR-013 | Adapt generated SVG paints in the native artwork worker | Qt 5 SVG Tiny cannot render CSS rgba/patterns. Convert paint to RGB/opacity and omit only the known placeholder dotted overlay, keeping backend/remote output unchanged. |
 | ADR-014 | Project the cover face and its reflection onto a shared floor | A projection makes both foot edges and reflection widths follow the same turn. Mask reflections by cover order, then paint the faces so a reflection cannot erase its neighbour's artwork. |
+| ADR-015 | Anchor native overlays to the cover stage | Search, its touch keyboard, the caption actions and transport stay out of the cover layout. The album strip is composited over the reflections. Footer menus and the drawer suspend the five-second idle return to the playing album. |
 
 Do not infer approved native update, image or hardware support from these design
 decisions. Every target requires package, boot, input, audio and resource evidence.

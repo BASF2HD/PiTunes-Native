@@ -3,7 +3,13 @@
 #include "TouchKeyboard.h"
 #include "TrackDrawer.h"
 #include "PlayerIcons.h"
-#include <QButtonGroup>
+#include <QActionGroup>
+#include <QApplication>
+#include <QCollator>
+#include <QComboBox>
+#include <QMessageBox>
+#include <QStyleOption>
+#include <algorithm>
 #include <QSignalBlocker>
 #include <QWidgetAction>
 #include <QDialog>
@@ -65,7 +71,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
           "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #373942,stop:1 #20222a); }"
         "QToolButton#mainPlay:hover, QToolButton#mainPlay:focus { border-color: #b5bac8; background: #343846; }"
         "QToolButton#browseTab { border-radius: 0; border: 1px solid transparent; font-size: 10px; font-weight: 600; }"
-        "QToolButton#browseTab:checked { border-bottom: 2px solid #e0e3ee; }"
+        "QToolButton#browseTab[activeBrowse=\"true\"] { border-bottom: 2px solid #e0e3ee; }"
         "QToolButton#browseTab:focus { background: #20232d; }"
         "QMenu { background: #151722; color: #ecedf5; border: 1px solid #424653; padding: 4px; }"
         "QMenu::item { padding: 6px 20px 6px 26px; }"
@@ -131,28 +137,49 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         command("/api/player/options", {{"shuffle", !m_player.shuffle}});
     });
 
-    auto *searchPanel = new QWidget(root);
-    auto *searchLayout = new QHBoxLayout(searchPanel);
-    searchLayout->setContentsMargins(0, 0, 0, 0);
-    auto *search = new QLineEdit(searchPanel);
-    search->setPlaceholderText("Search albums and songs");
-    search->setAccessibleName("Search library");
-    search->setClearButtonEnabled(true);
-    searchLayout->addWidget(search, 1);
-    auto *keyboardButton = new QPushButton("⌨", searchPanel);
-    keyboardButton->setAccessibleName("Open search keyboard");
-    searchLayout->addWidget(keyboardButton);
-    auto *closeSearch = iconButton(PlayerIcon::Close, "Close search");
-    searchLayout->addWidget(closeSearch);
-    layout->addWidget(searchPanel);
-    searchPanel->hide();
-
     m_flow = new CoverFlowWidget(m_library, m_artwork, this);
     m_flow->setReducedMotion(reduced);
     layout->addWidget(m_flow, 1);
-    auto *transport = new QHBoxLayout;
+
+    m_searchPanel = new QFrame(m_flow);
+    m_searchPanel->setObjectName("librarySearchPanel");
+    m_searchPanel->setAccessibleName("Library search");
+    m_searchPanel->setStyleSheet(
+        "QFrame#librarySearchPanel { background: rgba(16, 18, 26, 246);"
+        "border: 1px solid #484d5c; border-radius: 8px; }");
+    auto *searchLayout = new QVBoxLayout(m_searchPanel);
+    searchLayout->setContentsMargins(8, 8, 8, 8);
+    searchLayout->setSpacing(5);
+    auto *searchBar = new QHBoxLayout;
+    searchLayout->addLayout(searchBar);
+    auto *search = new QLineEdit(m_searchPanel);
+    search->setPlaceholderText("Search albums and songs");
+    search->setAccessibleName("Search library");
+    search->setClearButtonEnabled(true);
+    searchBar->addWidget(search, 1);
+    auto *keyboardButton = new QPushButton("⌨", m_searchPanel);
+    keyboardButton->setAccessibleName("Open search keyboard");
+    searchBar->addWidget(keyboardButton);
+    auto *closeSearch = iconButton(PlayerIcon::Close, "Close search");
+    searchBar->addWidget(closeSearch);
+    auto *keyboard = new TouchKeyboard(m_searchPanel);
+    searchLayout->addWidget(keyboard);
+    keyboard->watch(search, false);
+    m_searchPanel->hide();
+
+    m_captionActions = iconButton(PlayerIcon::More, "Album or song information actions");
+    m_captionActions->setParent(m_flow);
+    m_captionActions->setObjectName("roundControl");
+    m_captionActions->hide();
+    connect(m_captionActions, &QToolButton::clicked, this, &MainWindow::showCaptionActions);
+
+    m_transportPanel = new QFrame(m_flow);
+    m_transportPanel->setObjectName("transportPanel");
+    m_transportPanel->setStyleSheet("QFrame#transportPanel { background: transparent; }");
+    auto *transport = new QHBoxLayout(m_transportPanel);
+    transport->setContentsMargins(0, 0, 0, 0);
     transport->setSpacing(8);
-    layout->addLayout(transport);
+    m_flow->setTransportInset(46);
     auto *previous = iconButton(PlayerIcon::Previous, "Previous song", 36);
     connect(previous, &QToolButton::clicked, this, [this] { command("/api/player/previous"); });
     transport->addWidget(previous);
@@ -169,21 +196,22 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     connect(next, &QToolButton::clicked, this, [this] { command("/api/player/next"); });
     transport->addWidget(next);
 
-    auto *albumRail = new QFrame(root);
+    auto *albumRail = new QFrame(m_transportPanel);
     albumRail->setObjectName("albumRail");
     albumRail->setStyleSheet(
-        "QFrame#albumRail { border: 1px solid #5c606b; border-radius: 10px; background:"
-          "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #333641,stop:0.48 #292b35,stop:1 #1c1e26); }"
-        "QToolButton { border: 0; } QToolButton:hover { background: #424653; }");
-    albumRail->setFixedHeight(25);
+        "QFrame#albumRail { border: 1px solid rgba(225, 232, 245, 68); border-radius: 10px; background:"
+        "qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(255,255,255,44),"
+        "stop:0.48 rgba(255,255,255,13),stop:1 rgba(255,255,255,28)); }"
+        "QToolButton { border: 0; } QToolButton:hover { background: rgba(230,235,248,60); }");
+    albumRail->setFixedHeight(22);
     auto *rail = new QHBoxLayout(albumRail);
     rail->setContentsMargins(5, 1, 5, 1);
     rail->setSpacing(2);
     auto *coverBack = iconButton(PlayerIcon::Left, "Previous album", 25);
-    coverBack->setFixedHeight(21);
+    coverBack->setFixedHeight(18);
     coverBack->setIconSize(QSize(12, 12));
     auto *coverForward = iconButton(PlayerIcon::Right, "Next album", 25);
-    coverForward->setFixedHeight(21);
+    coverForward->setFixedHeight(18);
     coverForward->setIconSize(QSize(12, 12));
     m_albumStrip = new AlbumStrip(albumRail);
     m_albumStrip->setRange(0, 0);
@@ -191,9 +219,10 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_albumStrip->setAccessibleName("Browse albums");
     m_albumStrip->setStyleSheet(
         "QSlider { background: transparent; }"
-        "QSlider::groove:horizontal { height: 14px; background: transparent; border-left: 1px solid #676a75; border-right: 1px solid #676a75; }"
-        "QSlider::handle:horizontal { width: 30px; margin: -1px 0; border: 1px solid #676c79; border-radius: 7px;"
-          "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #353b49,stop:1 #09090d); }");
+        "QSlider::groove:horizontal { height: 18px; background: transparent; "
+        "border-left: 1px solid rgba(210,218,235,52); border-right: 1px solid rgba(210,218,235,52); }"
+        "QSlider::handle:horizontal { width: 30px; margin: 3px 0; border: 1px solid #656b79; border-radius: 6px;"
+        "background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #444651,stop:0.54 #111216,stop:1 #060609); }");
     rail->addWidget(coverBack);
     rail->addWidget(m_albumStrip, 1);
     rail->addWidget(coverForward);
@@ -211,83 +240,61 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     auto *navigation = new QHBoxLayout;
     navigation->setSpacing(2);
     layout->addLayout(navigation);
-    auto *browseTabs = new QButtonGroup(this);
-    const auto tab = [root, navigation](PlayerIcon icon, const QString &label) {
-        auto *button = new QToolButton(root);
-        button->setObjectName("browseTab");
-        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-        button->setIcon(playerIcon(icon));
-        button->setIconSize(QSize(20, 20));
-        button->setText(label.toUpper());
-        button->setAccessibleName(label);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setMinimumHeight(44);
-        navigation->addWidget(button, 1);
-        return button;
-    };
-    const auto browse = [this, tab, browseTabs](PlayerIcon icon, const QString &label, std::function<void()> action) {
-        auto *button = tab(icon, label);
-        button->setCheckable(true);
-        browseTabs->addButton(button);
-        connect(button, &QToolButton::clicked, this, std::move(action));
-        return button;
-    };
-    browse(PlayerIcon::Albums, "Albums", [this] {
-        closeTrackDrawer();
-        if (!m_demo) m_library->reload();
-    })->setChecked(true);
-    browse(PlayerIcon::Songs, "Songs", [this] { showCollection("Songs", "/api/library/tracks?offset=0&limit=200", "tracks", {}); });
-    browse(PlayerIcon::Artists, "Artists", [this] { showCollection("Artists", "/api/library/artists", "artists", "artist:"); });
-    browse(PlayerIcon::Playlist, "Playlists", [this] { showCollection("Playlists", "/api/library/playlists", "playlists", "playlist:"); });
-    auto *more = tab(PlayerIcon::More, "More");
-    auto *menu = new QMenu(more);
-    more->setMenu(menu);
-    more->setPopupMode(QToolButton::InstantPopup);
-    const auto menuAction = [this, menu](PlayerIcon icon, const QString &name, std::function<void()> action) {
-        connect(menu->addAction(playerIcon(icon), name), &QAction::triggered, this, std::move(action));
-    };
-    menuAction(PlayerIcon::Favourite, "Favourite albums", [this] { if (!m_demo) m_library->reload("favourite"); });
-    menuAction(PlayerIcon::Favourite, "Favourite songs", [this] { showCollection("Favourite songs", "/api/library/starred/tracks", "tracks", {}); });
-    menuAction(PlayerIcon::Artists, "Composers", [this] { showCollection("Composers", "/api/library/composers", "composers", "composer:"); });
-    menuAction(PlayerIcon::Songs, "Genres", [this] { showCollection("Genres", "/api/library/genres", "genres", "genre:"); });
-    menuAction(PlayerIcon::Albums, "Years", [this] { showCollection("Years", "/api/library/years", "years", "year:"); });
-    menuAction(PlayerIcon::Albums, "Highest rated albums", [this] { if (!m_demo) m_library->reload("toprated", "rating"); });
-    menuAction(PlayerIcon::Volume, "Radio", [this] { showRadio(); });
-    menu->addSeparator();
-    menuAction(PlayerIcon::Playlist, "Sort by title", [this] { if (!m_demo) m_library->reload({}, "title"); });
-    menuAction(PlayerIcon::Playlist, "Sort by artist", [this] { if (!m_demo) m_library->reload({}, "artist"); });
-    menuAction(PlayerIcon::Playlist, "Sort by year", [this] { if (!m_demo) m_library->reload({}, "year-desc"); });
-    auto *reducedAction = menu->addAction("Reduced animations");
-    reducedAction->setCheckable(true);
-    reducedAction->setChecked(reduced);
-    connect(reducedAction, &QAction::toggled, this, [this](bool enabled) {
-        m_flow->setReducedMotion(enabled);
-        if (m_trackDrawer) m_trackDrawer->setReducedMotion(enabled);
-        QSettings().setValue("native/reducedMotion", enabled);
+    buildBrowseMenus(navigation, root, reduced);
+    m_message = new QLabel(root);
+    m_message->setWordWrap(true);
+    m_message->setAlignment(Qt::AlignCenter);
+    layout->addWidget(m_message);
+    m_message->hide();
+    m_flow->installEventFilter(this);
+    m_searchPanel->installEventFilter(this);
+    m_snapBack.setSingleShot(true);
+    m_snapBack.setInterval(5000);
+    m_snapBack.setTimerType(Qt::PreciseTimer);
+    connect(&m_snapBack, &QTimer::timeout, this, [this] {
+        const int row = returnAlbumRow();
+        if (row >= 0) m_flow->select(row);
     });
-    menuAction(PlayerIcon::Stop, "Stop playback", [this] { command("/api/player/stop"); });
-    connect(tab(PlayerIcon::Settings, "Settings"), &QToolButton::clicked, this, [this] {
-        if (m_demo) { setMessage("Demo mode · connect an API for appliance settings"); return; }
-        auto *dialog = new SettingsDialog(m_api, this);
-        dialog->setAttribute(Qt::WA_DeleteOnClose);
-        dialog->open();
-    });
-    m_message = new QLabel; m_message->setWordWrap(true); m_message->setAlignment(Qt::AlignCenter); layout->addWidget(m_message);
-    auto *keyboard = new TouchKeyboard(this); layout->addWidget(keyboard); keyboard->watch(search, false);
+    connect(m_flow, &CoverFlowWidget::navigationSettled, this, &MainWindow::scheduleReturnToPlayback);
+    connect(m_albumStrip, &QSlider::sliderPressed, &m_snapBack, &QTimer::stop);
+    connect(m_albumStrip, &QSlider::sliderReleased, this, &MainWindow::scheduleReturnToPlayback);
+    watchBrowsePopup(volumeMenu);
     connect(keyboardButton, &QPushButton::clicked, this, [=] { search->setFocus(); keyboard->show(); });
     connect(closeSearch, &QToolButton::clicked, searchToggle, [searchToggle] { searchToggle->setChecked(false); });
     connect(searchToggle, &QToolButton::toggled, this, [=](bool shown) {
-        searchPanel->setVisible(shown);
-        if (shown) { search->setFocus(); search->selectAll(); }
-        else { keyboard->hide(); search->clear(); m_flow->setFocus(); }
+        m_searchPanel->setVisible(shown);
+        if (shown) {
+            m_snapBack.stop();
+            m_preSearchFilter = m_library->filter();
+            m_preSearchSort = m_library->sortMode();
+            placeOverlays();
+            m_searchPanel->raise();
+            search->setFocus();
+        } else {
+            ++m_drawerGeneration;
+            m_searchDelay.stop();
+            keyboard->hide();
+            const QSignalBlocker blocker(search);
+            search->clear();
+            if (m_searchResults) {
+                m_searchResults = false;
+                m_library->reload(m_preSearchFilter, m_preSearchSort);
+            }
+            m_flow->setFocus();
+            scheduleReturnToPlayback();
+        }
     });
-    auto *dismissSearch = new QShortcut(QKeySequence(Qt::Key_Escape), searchPanel);
+    auto *dismissSearch = new QShortcut(QKeySequence(Qt::Key_Escape), m_searchPanel);
     dismissSearch->setContext(Qt::WidgetWithChildrenShortcut);
     connect(dismissSearch, &QShortcut::activated, closeSearch, &QToolButton::click);
-    // Keep physical-keyboard search compact; the keyboard is explicitly opened above.
     connect(search, &QLineEdit::textChanged, this, [this] { m_searchDelay.start(220); });
     m_searchDelay.setSingleShot(true);
-    connect(&m_searchDelay, &QTimer::timeout, this, [this, search] { if (!m_demo) m_library->reload({}, "year-desc", search->text().trimmed()); });
+    connect(&m_searchDelay, &QTimer::timeout, this, [this, search] {
+        if (m_demo) return;
+        const auto query = search->text().trimmed();
+        m_searchResults = !query.isEmpty();
+        m_library->reload(m_preSearchFilter, m_preSearchSort, query);
+    });
     connect(search, &QLineEdit::returnPressed, this, [this, search, keyboard] {
         keyboard->hide();
         if (!search->text().trimmed().isEmpty()) showCollection("Matching songs", "/api/search?limit=120&q="
@@ -301,6 +308,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         m_pendingAlbumRow = -1;
         syncAlbumStrip();
         if (!m_demo && row >= m_library->rowCount() - 24) m_library->loadNext();
+        scheduleReturnToPlayback();
     });
     connect(m_library, &LibraryModel::error, this, [this](const QString &message) {
         m_pendingAlbumRow = -1;
@@ -311,13 +319,17 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         ++m_drawerGeneration;
         m_pendingAlbumRow = -1;
         closeTrackDrawer();
+        m_captionActions->hide();
         syncAlbumStrip();
     });
     connect(m_library, &LibraryModel::pageLoaded, this, [this] {
         if (m_pendingAlbumRow >= 0) selectAlbumOnStrip(qMin(m_pendingAlbumRow, qMax(0, m_library->total() - 1)));
         else focusInitialPlaybackAlbum();
         syncAlbumStrip();
-        setMessage(m_demo ? "Demo mode · controls do not play audio" : QString("Albums | %1").arg(m_library->total()));
+        m_captionActions->setVisible(m_library->rowCount() > 0);
+        placeOverlays();
+        setMessage({});
+        if (!m_snapBack.isActive()) scheduleReturnToPlayback();
     });
     connect(m_seek, &QSlider::sliderReleased, this, [this] { command("/api/player/seek", {{"seconds", m_seek->value()}}); });
     connect(m_volume, &QSlider::sliderReleased, this, [this] { command("/api/player/volume", {{"volume", m_volume->value()}}); });
@@ -328,7 +340,207 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     else { m_library->reload(); refreshPlayer(); m_poll.start(); }
     m_flow->setFocus();
 }
-void MainWindow::setMessage(const QString &message) { m_message->setText(message); }
+void MainWindow::setMessage(const QString &message) {
+    m_message->setText(message);
+    m_message->setVisible(!message.isEmpty());
+}
+void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool reduced) {
+    const auto heading = [](QMenu *menu, const QString &title, bool main = false) {
+        auto *header = new QWidgetAction(menu);
+        auto *label = new QLabel(title, menu);
+        label->setTextFormat(Qt::PlainText);
+        label->setStyleSheet(main
+            ? "background: transparent; color: #f2f4fb; font-size: 14px; font-weight: 600; padding: 7px 13px;"
+            : "background: transparent; color: #a5adbf; font-size: 11px; font-weight: 600; padding: 5px 13px 2px;");
+        header->setDefaultWidget(label);
+        menu->addAction(header);
+    };
+    const auto tab = [this, root, navigation, heading](PlayerIcon icon, const QString &name) {
+        auto *button = new QToolButton(root);
+        button->setObjectName("browseTab");
+        button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        button->setIcon(playerIcon(icon));
+        button->setIconSize(QSize(20, 20));
+        button->setText(name.toUpper());
+        button->setAccessibleName(name);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setMinimumHeight(44);
+        navigation->addWidget(button, 1);
+        auto *menu = new QMenu(name, button);
+        menu->setAccessibleName(name + " menu");
+        heading(menu, name, true);
+        const bool primary = icon == PlayerIcon::Albums || icon == PlayerIcon::Songs ||
+            icon == PlayerIcon::Artists || icon == PlayerIcon::Playlist;
+        if (primary) {
+            button->setProperty("activeBrowse", icon == PlayerIcon::Albums);
+            connect(menu, &QMenu::triggered, button, [root, button](QAction *) {
+                for (auto *tab : root->findChildren<QToolButton *>("browseTab")) {
+                    const bool active = tab == button;
+                    if (tab->property("activeBrowse").toBool() == active) continue;
+                    tab->setProperty("activeBrowse", active);
+                    tab->style()->unpolish(tab);
+                    tab->style()->polish(tab);
+                    tab->update();
+                }
+            });
+        }
+        connect(button, &QToolButton::clicked, menu, [button, menu] {
+            menu->popup(button->mapToGlobal(QPoint((button->width() - menu->sizeHint().width()) / 2,
+                                                    -menu->sizeHint().height() - 5)));
+        });
+        watchBrowsePopup(menu);
+        return menu;
+    };
+    const auto options = [this](QMenu *menu, const QVector<QPair<QString, QString>> &items,
+                                const QString &selected, std::function<void(QString)> apply) {
+        auto *group = new QActionGroup(menu);
+        for (const auto &item : items) {
+            auto *action = menu->addAction(item.first);
+            group->addAction(action);
+            action->setCheckable(true);
+            action->setChecked(item.second == selected);
+            connect(action, &QAction::triggered, this, [apply, value = item.second] { apply(value); });
+        }
+    };
+    const QVector<QPair<QString, QString>> sorts = {
+        {"Year (newest first)", "year-desc"}, {"Year (oldest first)", "year-asc"}, {"Title (A–Z)", "title"}
+    };
+    const auto action = [this](QMenu *menu, PlayerIcon icon, const QString &label, std::function<void()> apply) {
+        connect(menu->addAction(playerIcon(icon), label), &QAction::triggered, this, std::move(apply));
+    };
+
+    auto *albums = tab(PlayerIcon::Albums, "Albums");
+    options(albums, {{"All albums", ""}, {"Favourite", "favourite"}}, m_albumScope, [this](const QString &scope) {
+        m_albumScope = scope;
+        browseAlbums(scope, m_albumSort);
+    });
+    heading(albums, "Sort by");
+    auto albumSorts = sorts;
+    albumSorts.append(QPair<QString, QString>{"Artist (A–Z)", "artist"});
+    options(albums, albumSorts, m_albumSort, [this](const QString &sort) {
+        m_albumSort = sort;
+        browseAlbums(m_albumScope, sort);
+    });
+    auto *count = albums->addAction(QString());
+    count->setEnabled(false);
+    connect(albums, &QMenu::aboutToShow, this, [this, count] {
+        const bool countMatches = !m_searchResults && m_library->filter() == m_albumScope;
+        count->setVisible(countMatches);
+        if (countMatches) {
+            const int albums = m_library->total();
+            count->setText(albums == 1 ? "1 album" : QString("%1 albums").arg(albums));
+        }
+    });
+
+    auto *songs = tab(PlayerIcon::Songs, "Songs");
+    options(songs, {{"All songs", "all"}, {"Group by album", "album"}, {"Favourite", "favourite"}},
+            m_songScope, [this](const QString &scope) {
+        m_songScope = scope;
+        browseSongs();
+    });
+    heading(songs, "Sort by");
+    auto songSorts = sorts;
+    songSorts.prepend({"Library order", ""});
+    options(songs, songSorts, m_songSort, [this](const QString &sort) {
+        m_songSort = sort;
+        browseSongs();
+    });
+
+    auto *artists = tab(PlayerIcon::Artists, "Artists");
+    action(artists, PlayerIcon::Artists, "Browse artists", [this] {
+        showCollection("Artists", "/api/library/artists", "artists", "artist:", m_artistSort);
+    });
+    action(artists, PlayerIcon::Songs, "Browse composers", [this] {
+        showCollection("Composers", "/api/library/composers", "composers", "composer:", m_artistSort);
+    });
+    heading(artists, "Sort albums by");
+    options(artists, sorts, m_artistSort, [this](const QString &sort) {
+        m_artistSort = sort;
+        const auto filter = m_library->filter();
+        if (filter.startsWith("artist:") || filter.startsWith("composer:")) browseAlbums(filter, sort);
+    });
+
+    auto *playlists = tab(PlayerIcon::Playlist, "Playlists");
+    action(playlists, PlayerIcon::Playlist, "Browse playlists", [this] {
+        showCollection("Playlists", "/api/library/playlists", "playlists", "playlist:", m_playlistSort);
+    });
+    heading(playlists, "Sort songs by");
+    auto playlistSorts = sorts;
+    playlistSorts.prepend({"Playlist order", ""});
+    options(playlists, playlistSorts, m_playlistSort, [this](const QString &sort) {
+        m_playlistSort = sort;
+        if (!m_currentPlaylistId.isEmpty()) {
+            showCollection(m_currentPlaylistName, "/api/library/playlists/" +
+                           QString::fromUtf8(QUrl::toPercentEncoding(m_currentPlaylistId)) + "/tracks", "tracks", {}, sort);
+        }
+    });
+
+    auto *more = tab(PlayerIcon::More, "More");
+    action(more, PlayerIcon::Volume, "Radio", [this] { showRadio(); });
+    action(more, PlayerIcon::Albums, "Years", [this] { showCollection("Years", "/api/library/years", "years", "year:", m_albumSort); });
+    action(more, PlayerIcon::Songs, "Genres", [this] { showCollection("Genres", "/api/library/genres", "genres", "genre:", m_albumSort); });
+    action(more, PlayerIcon::Albums, "Highest rated albums", [this] { browseAlbums("toprated", "rating"); });
+    more->addSeparator();
+    action(more, PlayerIcon::Stop, "Stop playback", [this] { command("/api/player/stop"); });
+
+    auto *settings = tab(PlayerIcon::Settings, "Settings");
+    action(settings, PlayerIcon::Settings, "Appliance settings", [this] {
+        if (m_demo) { setMessage("Connect a backend for appliance settings"); return; }
+        auto *dialog = new SettingsDialog(m_api, this);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        connect(dialog, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
+        dialog->open();
+    });
+    auto *reducedAction = settings->addAction("Reduced animations");
+    reducedAction->setCheckable(true);
+    reducedAction->setChecked(reduced);
+    connect(reducedAction, &QAction::toggled, this, [this](bool enabled) {
+        m_flow->setReducedMotion(enabled);
+        if (m_trackDrawer) m_trackDrawer->setReducedMotion(enabled);
+        QSettings().setValue("native/reducedMotion", enabled);
+    });
+}
+
+void MainWindow::browseAlbums(const QString &filter, const QString &sort) {
+    closeTrackDrawer();
+    if (!m_demo) m_library->reload(filter, sort);
+}
+
+void MainWindow::browseSongs() {
+    if (m_songScope == "album") {
+        browseAlbums({}, m_songSort.isEmpty() ? m_albumSort : m_songSort);
+    } else if (m_songScope == "favourite") {
+        showCollection("Favourite songs", "/api/library/starred/tracks", "tracks", {}, m_songSort);
+    } else {
+        showCollection("Songs", "/api/library/tracks?offset=0&limit=200", "tracks", {}, m_songSort);
+    }
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
+    if ((watched == m_flow && event->type() == QEvent::Resize) ||
+        (watched == m_searchPanel && event->type() == QEvent::LayoutRequest && m_searchPanel->isVisible())) {
+        placeOverlays();
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::placeOverlays() {
+    m_transportPanel->setGeometry(0, m_flow->height() - 46, m_flow->width(), 46);
+    const auto caption = m_flow->captionRect();
+    m_captionActions->move(caption.right() + 4, caption.top());
+    if (m_searchPanel->isVisible()) {
+        m_searchPanel->setFixedWidth(qMin(575, m_flow->width() - 16));
+        m_searchPanel->adjustSize();
+        m_searchPanel->move(m_flow->width() - m_searchPanel->width() - 8, 3);
+        m_searchPanel->raise();
+    }
+}
+
+void MainWindow::watchBrowsePopup(QMenu *menu) {
+    connect(menu, &QMenu::aboutToShow, &m_snapBack, &QTimer::stop);
+    connect(menu, &QMenu::aboutToHide, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
+}
+
 void MainWindow::command(const QString &path, const QJsonObject &body) {
     if (m_demo) { setMessage("Demo mode · no audio or system changes"); return; }
     if (m_commands.size() >= 8) { setMessage("Waiting for the previous controls to finish…"); return; }
@@ -354,6 +566,8 @@ void MainWindow::refreshPlayer() {
         m_pollPending = false;
         if (generation != m_playerGeneration || m_commandPending) return;
         if (!error.isEmpty()) { setMessage(error + " · retrying automatically"); return; }
+        const auto previousState = m_player.state;
+        const auto previousAlbum = m_player.track.albumId;
         m_player = PlayerState::fromJson(object);
         const bool playing = m_player.state == "play";
         if (playing != m_play->property("playing").toBool()) {
@@ -382,7 +596,8 @@ void MainWindow::refreshPlayer() {
         m_flow->setPlayback(m_player);
         focusInitialPlaybackAlbum();
         if (m_trackDrawer) m_trackDrawer->setPlayback(m_player);
-        if (m_message->text().contains("retrying automatically")) setMessage("Connected to PiTunes");
+        if (previousState != m_player.state || previousAlbum != m_player.track.albumId) scheduleReturnToPlayback();
+        if (m_message->text().contains("retrying automatically")) setMessage({});
     });
 }
 void MainWindow::syncAlbumStrip() {
@@ -406,35 +621,56 @@ void MainWindow::selectAlbumOnStrip(int row) {
     m_pendingAlbumRow = -1;
     m_flow->select(row);
 }
-void MainWindow::focusInitialPlaybackAlbum() {
-    if (m_initialAlbumFocused || m_player.track.albumId.isEmpty() ||
-        (m_player.state != "pause" && m_player.state != "play")) return;
+int MainWindow::playingAlbumRow() const {
+    if (m_player.track.albumId.isEmpty()) return -1;
     for (int row = 0; row < m_library->rowCount(); ++row) {
-        if (m_library->album(row)->id != m_player.track.albumId) continue;
+        if (m_library->album(row)->id == m_player.track.albumId) return row;
+    }
+    return -1;
+}
+void MainWindow::focusInitialPlaybackAlbum() {
+    if (m_initialAlbumFocused || (m_player.state != "pause" && m_player.state != "play")) return;
+    const int row = playingAlbumRow();
+    if (row >= 0) {
         m_initialAlbumFocused = true;
         m_flow->select(row, false);
         syncAlbumStrip();
-        return;
     }
+}
+int MainWindow::returnAlbumRow() const {
+    if (m_player.state != "play" || m_player.track.file.isEmpty() || m_flow->animating() ||
+        m_trackDrawer || m_searchPanel->isVisible() || m_albumStrip->isSliderDown() ||
+        m_pendingAlbumRow >= 0 || (m_pendingInspection && m_pendingInspection == m_drawerGeneration) ||
+        QApplication::activePopupWidget() || QApplication::activeModalWidget()) return -1;
+    const int row = playingAlbumRow();
+    return row == m_flow->currentIndex() ? -1 : row;
+}
+void MainWindow::scheduleReturnToPlayback() {
+    if (returnAlbumRow() < 0) m_snapBack.stop();
+    else m_snapBack.start();
 }
 void MainWindow::showAlbum(int row, bool play) {
     m_initialAlbumFocused = true;
     const auto *selected = m_library->album(row); if (!selected) return;
+    m_snapBack.stop();
     const Album album = *selected;
     if (m_demo) {
         showTracks(album.title, {{"demo/track.flac", "Demonstration track", album.artist, album.title, album.id, album.year, 210, "1"}}, album.id, album.year);
         return;
     }
     const auto generation = ++m_drawerGeneration;
+    if (!play) m_pendingInspection = generation;
     const auto decodedId = QUrl::fromPercentEncoding(album.id.toUtf8());
     m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decodedId)) + "/tracks",
         [this, album, play, generation](QJsonObject o, QString error) {
             if (generation != m_drawerGeneration) return;
-            if (!error.isEmpty()) { setMessage(error); return; }
+            m_pendingInspection = 0;
+            if (!error.isEmpty()) { setMessage(error); scheduleReturnToPlayback(); return; }
             QVector<Track> tracks; for (const auto &v : o["tracks"].toArray()) tracks.append(Track::fromJson(v.toObject()));
             if (play && !tracks.isEmpty()) {
                 QJsonArray queue; for (const auto &track : tracks) queue.append(track.file);
                 command("/api/player/play", {{"file", tracks.first().file}, {"albumId", album.id}, {"queue", queue}, {"continuous", true}});
+                scheduleReturnToPlayback();
             } else showTracks(album.title, tracks, album.id, album.year);
         });
 }
@@ -442,13 +678,18 @@ void MainWindow::closeTrackDrawer() {
     if (!m_trackDrawer) return;
     m_trackDrawer->close();
     m_trackDrawer = nullptr;
+    m_drawerAlbumId.clear();
     m_flow->setCaptionClearance(0);
     m_flow->setFocus();
+    placeOverlays();
+    scheduleReturnToPlayback();
 }
 void MainWindow::showTracks(const QString &title, const QVector<Track> &tracks, const QString &albumId, const QString &year) {
     closeTrackDrawer();
     auto *drawer = new TrackDrawer(m_flow, title, year, tracks, !albumId.isEmpty());
     m_trackDrawer = drawer;
+    m_drawerAlbumId = albumId;
+    m_snapBack.stop();
     drawer->setPlayback(m_player);
     drawer->setReducedMotion(m_flow->reducedMotion());
     connect(drawer, &TrackDrawer::dismissRequested, this, &MainWindow::closeTrackDrawer);
@@ -459,29 +700,189 @@ void MainWindow::showTracks(const QString &title, const QVector<Track> &tracks, 
         command("/api/player/play", {{"file", tracks[row].file}, {"albumId", albumId},
                                      {"queue", queue}, {"continuous", !albumId.isEmpty()}});
     });
-    connect(drawer, &TrackDrawer::trackFavouriteRequested, this, [this, tracks](int row, bool starred) {
+    connect(drawer, &TrackDrawer::trackActionsRequested, this, [this, tracks](int row, const QPoint &position) {
         if (row < 0 || row >= tracks.size()) return;
-        command("/api/library/favourites", {{"trackId", tracks[row].file}, {"starred", starred}});
+        showSubjectActions(position, {}, tracks[row], tracks);
     });
     connect(drawer, &TrackDrawer::albumFavouriteRequested, this, [this, albumId] {
-        command("/api/library/favourites", {{"albumId", albumId}, {"starred", true}});
-    });
-    connect(drawer, &TrackDrawer::savePlaylistRequested, this, [this, drawer, tracks] {
-        bool accepted;
-        const auto name = QInputDialog::getText(drawer, "New playlist", "Name", QLineEdit::Normal, {}, &accepted).trimmed();
-        if (!accepted || name.isEmpty()) return;
-        QJsonArray ids;
-        for (const auto &track : tracks) ids.append(track.file);
-        command("/api/library/playlists", {{"name", name}, {"trackIds", ids}});
+        toggleFavourite(albumId, true);
     });
     drawer->open();
+    placeOverlays();
+    refreshFavourites();
+    updateFavouriteHeart();
 }
-void MainWindow::showCollection(QString title, QString path, QString key, QString filterPrefix) {
-    if (m_demo) { setMessage("Connect a backend to browse " + title); return; }
+
+namespace {
+QString favouriteKey(const QString &id, bool album) { return (album ? "album:" : "track:") + id; }
+
+QJsonArray trackIds(const QVector<Track> &tracks) {
+    QJsonArray ids;
+    for (const auto &track : tracks) if (!track.file.isEmpty()) ids.append(track.file);
+    return ids;
+}
+}
+
+void MainWindow::refreshFavourites() {
+    if (m_demo || m_favouritesLoading || !m_pendingFavourites.isEmpty()) return;
+    m_favouritesLoading = true;
+    const auto revision = m_favouritesRevision;
+    m_api->get("/api/library/favourites", [this, revision](QJsonObject o, QString error) {
+        m_favouritesLoading = false;
+        if (!error.isEmpty() || revision != m_favouritesRevision) return;
+        m_favourites.clear();
+        for (const auto &value : o["albums"].toArray()) m_favourites.insert(favouriteKey(textValue(value), true));
+        for (const auto &value : o["tracks"].toArray()) m_favourites.insert(favouriteKey(textValue(value), false));
+        m_favouritesReady = true;
+        updateFavouriteHeart();
+    });
+}
+
+void MainWindow::updateFavouriteHeart() {
+    if (m_trackDrawer) m_trackDrawer->setAlbumFavourite(
+        m_favourites.contains(favouriteKey(m_drawerAlbumId, true)), m_favouritesReady || m_demo);
+    emit favouritesChanged();
+}
+
+void MainWindow::toggleFavourite(const QString &id, bool album) {
+    const auto key = favouriteKey(id, album);
+    if (id.isEmpty() || (!m_favouritesReady && !m_demo) || m_pendingFavourites.contains(key)) {
+        updateFavouriteHeart();
+        return;
+    }
+    const bool starred = !m_favourites.contains(key);
+    if (starred) m_favourites.insert(key);
+    else m_favourites.remove(key);
+    updateFavouriteHeart();
+    if (m_demo) return;
+    ++m_favouritesRevision;
+    m_pendingFavourites.insert(key);
+    m_api->post("/api/library/favourites", {{album ? "albumId" : "trackId", id}, {"starred", starred}},
+        [this, key, starred](QJsonObject, QString error) {
+            m_pendingFavourites.remove(key);
+            if (error.isEmpty()) return;
+            if (starred) m_favourites.remove(key);
+            else m_favourites.insert(key);
+            updateFavouriteHeart();
+            setMessage(error);
+        });
+}
+
+void MainWindow::showCaptionActions() {
+    const auto *album = m_library->album(m_flow->captionAlbumIndex());
+    if (!album) return;
+    const bool playingHere = m_player.state == "play" && !m_player.track.file.isEmpty() &&
+        m_player.track.albumId == album->id;
+    const auto anchor = m_captionActions->mapToGlobal(QPoint(m_captionActions->width(), 0));
+    showSubjectActions(anchor, playingHere ? Album{} : *album, playingHere ? m_player.track : Track{});
+}
+
+void MainWindow::showSubjectActions(const QPoint &anchor, const Album &album, const Track &track,
+                                    const QVector<Track> &list) {
+    const bool albumContext = !album.id.isEmpty();
+    const auto id = albumContext ? album.id : track.file;
+    const auto title = albumContext ? album.title : track.title;
+    auto *menu = new QMenu(this);
+    menu->setAccessibleName(albumContext ? "Album actions" : "Song actions");
+    menu->setStyleSheet("QMenu { background: #151722; color: #ecedf5; border: 1px solid #424653; padding: 4px; }"
+                        "QMenu::item { padding: 6px 14px; } QMenu::item:selected { background: #343c53; }");
+    auto *add = menu->addAction(albumContext ? "Add album to playlist…" : "Add to playlist…", this,
+        [this, album, albumContext, track] {
+            if (m_demo) return;
+            if (!albumContext) { choosePlaylist({track.file}); return; }
+            const auto generation = ++m_drawerGeneration;
+            const auto decoded = QUrl::fromPercentEncoding(album.id.toUtf8());
+            m_api->get("/api/library/album/" + QString::fromUtf8(QUrl::toPercentEncoding(decoded)) + "/tracks",
+                [this, generation](QJsonObject o, QString error) {
+                    if (generation != m_drawerGeneration) return;
+                    if (!error.isEmpty()) { setMessage(error); return; }
+                    QVector<Track> tracks;
+                    for (const auto &row : o["tracks"].toArray()) tracks.append(Track::fromJson(row.toObject()));
+                    choosePlaylist(trackIds(tracks));
+                });
+        });
+    add->setEnabled(!id.isEmpty() && !m_demo);
+    auto *favourite = menu->addAction(QString(), this, [this, id, albumContext] { toggleFavourite(id, albumContext); });
+    const auto labelFavourite = [this, favourite, id, albumContext] {
+        const bool starred = m_favourites.contains(favouriteKey(id, albumContext));
+        favourite->setText(starred ? "Remove favourite" : "Favourite");
+        favourite->setIcon(playerIcon(starred ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite));
+        favourite->setEnabled(!id.isEmpty() && (m_favouritesReady || m_demo));
+    };
+    connect(this, &MainWindow::favouritesChanged, menu, labelFavourite);
+    labelFavourite();
+    refreshFavourites();
+    menu->addAction("More info", this, [this, title, album, track, albumContext] {
+        QStringList lines;
+        if (albumContext) lines << albumWithYear(album.title, album.year) << album.artist;
+        else {
+            lines << track.title << track.artist << albumWithYear(track.album, track.year);
+            if (track.duration > 0.) lines << timeLabel(track.duration);
+        }
+        lines.removeAll(QString());
+        auto *details = new QMessageBox(QMessageBox::NoIcon, title, {}, QMessageBox::Close, this);
+        details->setTextFormat(Qt::PlainText);
+        details->setText(lines.join('\n'));
+        details->setAttribute(Qt::WA_DeleteOnClose);
+        connect(details, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
+        details->open();
+    });
+    if (!list.isEmpty()) {
+        menu->addSeparator();
+        menu->addAction("Save list as playlist…", this, [this, list] { createPlaylist(trackIds(list)); });
+    }
+    watchBrowsePopup(menu);
+    connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+    menu->popup(anchor - QPoint(menu->sizeHint().width(), menu->sizeHint().height()));
+}
+
+void MainWindow::choosePlaylist(const QJsonArray &ids) {
+    if (ids.isEmpty()) return;
     const auto generation = ++m_drawerGeneration;
-    m_api->get(path, [this, title, key, filterPrefix, generation](QJsonObject o, QString error) {
+    m_api->get("/api/library/playlists", [this, ids, generation](QJsonObject o, QString error) {
         if (generation != m_drawerGeneration) return;
         if (!error.isEmpty()) { setMessage(error); return; }
+        const auto playlists = o["playlists"].toArray();
+        QStringList labels{"New playlist…"};
+        for (const auto &entry : playlists) labels.append(textValue(entry.toObject()["name"]));
+        QInputDialog dialog(this);
+        dialog.setWindowTitle("Add to playlist");
+        dialog.setLabelText("Playlist");
+        dialog.setComboBoxItems(labels);
+        dialog.setComboBoxEditable(false);
+        const bool accepted = dialog.exec() == QDialog::Accepted;
+        const auto *combo = dialog.findChild<QComboBox *>();
+        const int row = combo ? combo->currentIndex() : -1;
+        scheduleReturnToPlayback();
+        if (!accepted) return;
+        if (row == 0) createPlaylist(ids);
+        else if (row > 0) appendToPlaylist(textValue(playlists[row - 1].toObject()["id"]), ids, 0);
+    });
+}
+void MainWindow::createPlaylist(const QJsonArray &ids) {
+    bool accepted = false;
+    const auto name = QInputDialog::getText(this, "New playlist", "Name", QLineEdit::Normal, {}, &accepted).trimmed();
+    scheduleReturnToPlayback();
+    if (accepted && !name.isEmpty()) command("/api/library/playlists", {{"name", name}, {"trackIds", ids}});
+}
+void MainWindow::appendToPlaylist(const QString &id, const QJsonArray &tracks, int row) {
+    if (id.isEmpty() || row >= tracks.size()) return;
+    m_api->post("/api/library/playlists/tracks", {{"playlistId", id}, {"trackId", tracks[row]}},
+        [this, id, tracks, row](QJsonObject, QString error) {
+            if (!error.isEmpty()) { setMessage(error); return; }
+            appendToPlaylist(id, tracks, row + 1);
+        });
+}
+
+void MainWindow::showCollection(QString title, QString path, QString key, QString filterPrefix, QString sort) {
+    if (m_demo) { setMessage("Connect a backend to browse " + title); return; }
+    const auto generation = ++m_drawerGeneration;
+    m_pendingInspection = generation;
+    m_snapBack.stop();
+    m_api->get(path, [this, title, key, filterPrefix, sort, generation](QJsonObject o, QString error) {
+        if (generation != m_drawerGeneration) return;
+        m_pendingInspection = 0;
+        if (!error.isEmpty()) { setMessage(error); scheduleReturnToPlayback(); return; }
         const auto rows = o[key].toArray();
         if (key == "tracks") {
             QVector<Track> tracks;
@@ -491,6 +892,16 @@ void MainWindow::showCollection(QString title, QString path, QString key, QStrin
                 tracks.clear();
                 for (const auto &id : o["playlist"].toObject()["trackIds"].toArray())
                     if (byFile.contains(textValue(id))) tracks.append(byFile.value(textValue(id)));
+            }
+            if (!sort.isEmpty()) {
+                QCollator collator;
+                collator.setCaseSensitivity(Qt::CaseInsensitive);
+                std::stable_sort(tracks.begin(), tracks.end(), [&](const Track &a, const Track &b) {
+                    if (sort != "title" && a.year.toInt() != b.year.toInt()) {
+                        return sort == "year-asc" ? a.year.toInt() < b.year.toInt() : a.year.toInt() > b.year.toInt();
+                    }
+                    return collator.compare(a.title, b.title) < 0;
+                });
             }
             showTracks(title, tracks); return;
         }
@@ -502,10 +913,15 @@ void MainWindow::showCollection(QString title, QString path, QString key, QStrin
             auto *item = new QStandardItem(name); item->setEditable(false); item->setSizeHint(QSize(200, 40));
             item->setData(filterPrefix == "playlist:" ? textValue(row["id"]) : name, Qt::UserRole); model->appendRow(item);
         }
-        connect(list, &QListView::activated, dialog, [this, model, filterPrefix, dialog](const QModelIndex &i) {
+        connect(dialog, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
+        connect(list, &QListView::activated, dialog, [this, model, filterPrefix, sort, dialog](const QModelIndex &i) {
             const auto value = model->item(i.row())->data(Qt::UserRole).toString(); dialog->accept();
-            if (filterPrefix == "playlist:") showCollection(model->item(i.row())->text(), "/api/library/playlists/" + QString::fromUtf8(QUrl::toPercentEncoding(value)) + "/tracks", "tracks", {});
-            else m_library->reload(filterPrefix + value);
+            if (filterPrefix == "playlist:") {
+                m_currentPlaylistId = value;
+                m_currentPlaylistName = model->item(i.row())->text();
+                showCollection(m_currentPlaylistName, "/api/library/playlists/" +
+                               QString::fromUtf8(QUrl::toPercentEncoding(value)) + "/tracks", "tracks", {}, m_playlistSort);
+            } else browseAlbums(filterPrefix + value, sort);
         });
         auto *close = new QDialogButtonBox(QDialogButtonBox::Close, dialog); layout->addWidget(close);
         connect(close, &QDialogButtonBox::rejected, dialog, &QDialog::reject); dialog->open();

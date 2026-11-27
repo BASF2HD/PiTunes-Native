@@ -7,7 +7,6 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListView>
-#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
@@ -194,7 +193,7 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     setAttribute(Qt::WA_StyledBackground);
     setFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont));
     setStyleSheet(
-        "QFrame#trackDrawer { background: rgba(12, 14, 24, 239); border: 1px solid rgba(205, 216, 255, 62); border-radius: 9px; }"
+        "QFrame#trackDrawer { background: #12141e; border: 1px solid #3d4251; }"
         "QLabel { background: transparent; border: 0; color: #aab0c2; font-size: 12px; }"
         "QLabel#drawerTitle { color: #f4f5fa; font-size: 15px; font-weight: 600; }"
         "QLabel#drawerCount { font-size: 13px; }"
@@ -232,7 +231,9 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
         return button;
     };
     if (albumContext) {
-        connect(iconButton(PlayerIcon::Favourite, "Favourite album"), &QPushButton::clicked, this, &TrackDrawer::albumFavouriteRequested);
+        m_heart = iconButton(PlayerIcon::Favourite, "Favourite album");
+        m_heart->setCheckable(true);
+        connect(m_heart, &QPushButton::clicked, this, &TrackDrawer::albumFavouriteRequested);
     }
     connect(iconButton(PlayerIcon::Close, "Close songs"), &QPushButton::clicked, this, &TrackDrawer::dismissRequested);
     layout->addLayout(header);
@@ -366,6 +367,16 @@ void TrackDrawer::setReducedMotion(bool reduced) {
     m_list->viewport()->update();
 }
 
+void TrackDrawer::setAlbumFavourite(bool starred, bool ready) {
+    if (!m_heart) return;
+    m_heart->setIcon(playerIcon(starred ? PlayerIcon::FavouriteFilled : PlayerIcon::Favourite));
+    const QString label = starred ? "Remove favourite album" : "Favourite album";
+    m_heart->setAccessibleName(label);
+    m_heart->setToolTip(label);
+    m_heart->setChecked(starred);
+    m_heart->setEnabled(ready);
+}
+
 void TrackDrawer::syncPulse() {
     if (isVisible() && m_playing && !m_reduced) {
         for (const int row : m_activeRows) {
@@ -384,16 +395,7 @@ void TrackDrawer::syncPulse() {
 }
 
 void TrackDrawer::showTrackActions(const QModelIndex &index) {
-    auto *menu = new QMenu(this);
-    menu->setStyleSheet("QMenu { background: #202232; color: #f0f1f7; } QMenu::item:selected { background: #38415d; }");
-    const int row = index.row();
-    menu->addAction("Play song", this, [this, row] { emit playRequested(row); });
-    menu->addAction("Favourite song", this, [this, row] { emit trackFavouriteRequested(row, true); });
-    menu->addAction("Remove song from favourites", this, [this, row] { emit trackFavouriteRequested(row, false); });
-    menu->addSeparator();
-    menu->addAction("Save list as playlist…", this, &TrackDrawer::savePlaylistRequested);
-    connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
     const auto rect = m_list->visualRect(index);
-    menu->popup(m_list->viewport()->mapToGlobal(rect.bottomRight() - QPoint(actionsWidth, 0)));
+    emit trackActionsRequested(index.row(), m_list->viewport()->mapToGlobal(rect.bottomRight() - QPoint(actionsWidth, 0)));
 }
 } // namespace PiTunes

@@ -39,7 +39,10 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
             updateCaption();
             prefetch();
         }
-        if (std::abs(m_motion.position - m_goal) < .0015 && std::abs(m_motion.velocity) < .023) settle();
+        if (std::abs(m_motion.position - m_goal) < .0015 && std::abs(m_motion.velocity) < .023) {
+            settle();
+            if (!m_trackpadActive) emit navigationSettled();
+        }
         update();
     });
     m_trackpadIdle.setSingleShot(true);
@@ -52,6 +55,7 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
         // its landing. Keep both position and velocity continuous at release.
         const double approach = remaining == 0. ? 0. : m_motion.velocity / remaining;
         moveTo(landing, true, qBound(10., approach, 24.));
+        if (!m_timer.isActive()) emit navigationSettled();
     });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
         m_trackpadIdle.stop();
@@ -72,11 +76,22 @@ int CoverFlowWidget::visibleCoverCount() const {
     return qMax(0, last - first + 1);
 }
 double CoverFlowWidget::coverSize() const {
-    return qMax(1., qMin(width() * .40, qMin(height() * .65, height() * .965 - 58.)));
+    const double fraction = m_transportInset > 0 ? .77 : .65;
+    return qMax(1., qMin(width() * .46, qMin(height() * fraction, height() * .965 - m_transportInset - 58.)));
 }
 QRect CoverFlowWidget::centreCoverRect() const {
     const double size = coverSize();
     return QRectF((width() - size) / 2., height() * .035, size, size).toAlignedRect();
+}
+QRect CoverFlowWidget::captionRect() const {
+    const int textWidth = qMin(width() - 72, qBound(256, int(coverSize() * 1.05), 520));
+    const int y = qMax(qRound(height() * .035 + coverSize()), m_captionClearance) + 8;
+    return {(width() - textWidth) / 2, y, textWidth, qMax(0, height() - m_transportInset - y)};
+}
+void CoverFlowWidget::setTransportInset(int pixels) {
+    m_transportInset = pixels;
+    prefetch();
+    update();
 }
 QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     // Cull once a cover's inner edge leaves the viewport. Fractional positions
@@ -139,6 +154,7 @@ void CoverFlowWidget::setReducedMotion(bool reduced) {
         m_goal = m_target;
         settle();
         update();
+        emit navigationSettled();
     }
 }
 void CoverFlowWidget::setPlayback(const PlayerState &state) {
@@ -236,12 +252,11 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         paintCovers(painter, size, top);
     }
     const auto &caption = m_caption;
-    const int textWidth = qMin(width() - 16, qMax(int(size * 1.65), 288));
-    const int y = qMax(qRound(top + size), m_captionClearance) + 8;
-    const int textLeft = (width() - textWidth) / 2;
-    const int available = height() - y;
+    const auto textArea = captionRect();
+    const int textWidth = textArea.width();
+    const int available = textArea.height();
     QFont font = painter.font();
-    int lineTop = y;
+    int lineTop = textArea.y();
     for (int i = 0; i < caption.size(); ++i) {
         const int ideal = i == 0 ? qBound(16, width() / 48, 24) : qBound(13, width() / 68, 18);
         font.setPixelSize(qMin(ideal, qMax(11, (available - 9) / qMax(1, caption.size()))));
@@ -249,7 +264,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         painter.setFont(font);
         const auto metrics = painter.fontMetrics();
         const int lineHeight = metrics.height() + 1;
-        const QRect line(textLeft, lineTop, textWidth, lineHeight);
+        const QRect line(textArea.x(), lineTop, textWidth, lineHeight);
         const auto text = metrics.elidedText(caption[i], i == 0 && m_captionShowsPlayback ? Qt::ElideRight : Qt::ElideMiddle, textWidth);
         painter.setPen(Qt::black);
         painter.drawText(line.translated(0, 1), Qt::AlignCenter, text);
@@ -279,9 +294,8 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top) {
     };
     QVector<Card> cards;
     cards.reserve(rows.size());
-    const double rush = carouselAmount(m_motion.velocity);
     for (int row : rows) {
-        cards.append({row, projectCover(row - m_motion.position, size, origin, rush),
+        cards.append({row, projectCover(row - m_motion.position, size, origin, m_motion.velocity),
                       m_artwork->find(m_model->album(row)->artUrl)});
     }
 

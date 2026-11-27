@@ -117,7 +117,8 @@ QPixmap renderIcon(PlayerIcon icon, const QColor &color) {
         }
         break;
     }
-    case PlayerIcon::Favourite: {
+    case PlayerIcon::Favourite:
+    case PlayerIcon::FavouriteFilled: {
         QPainterPath heart;
         heart.moveTo(12, 20);
         heart.cubicTo(9, 17.1, 4, 13.9, 4, 8.9);
@@ -125,7 +126,7 @@ QPixmap renderIcon(PlayerIcon icon, const QColor &color) {
         heart.cubicTo(14.8, 4, 20, 4.9, 20, 8.9);
         heart.cubicTo(20, 13.9, 15, 17.1, 12, 20);
         painter.setPen(line);
-        painter.setBrush(Qt::NoBrush);
+        painter.setBrush(icon == PlayerIcon::FavouriteFilled ? QBrush(color) : Qt::NoBrush);
         painter.drawPath(heart);
         break;
     }
@@ -146,7 +147,8 @@ QIcon playerIcon(PlayerIcon icon, bool active) {
     const int key = 2 * int(icon) + (active ? 1 : 0);
     if (const auto found = icons.constFind(key); found != icons.cend()) return *found;
     QIcon result;
-    result.addPixmap(renderIcon(icon, active ? QColor("#f2f4fb") : QColor("#999daa")));
+    const QColor color = icon == PlayerIcon::FavouriteFilled ? QColor("#ff819d") : QColor("#f2f4fb");
+    result.addPixmap(renderIcon(icon, active ? color : QColor("#999daa")));
     result.addPixmap(renderIcon(icon, QColor("#565962")), QIcon::Disabled);
     icons.insert(key, result);
     return result;

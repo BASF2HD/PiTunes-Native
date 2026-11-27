@@ -10,7 +10,7 @@ struct CoverQuads {
 
 // Geometry is normalized to the centre cover. Its floor is at y=1 and its
 // centre is x=0. Each side cover projects onto the same floor plane.
-CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double rush = 0.);
+CoverQuads projectCover(double distance, double pixels, const QPointF &origin, double velocity = 0.);
 double coverReach(double halfViewport);
 double carouselAmount(double velocity);
 

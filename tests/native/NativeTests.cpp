@@ -18,6 +18,7 @@
 #include <QToolButton>
 #include <QUrlQuery>
 #include <QWheelEvent>
+#include <algorithm>
 
 using namespace PiTunes;
 
@@ -105,6 +106,152 @@ private slots:
         QTRY_COMPARE(flow->accessibleDescription(), QString("Browsing album\nAlbum artist | 1992"));
         flow->select(0, false);
         QCOMPARE(flow->accessibleDescription(), caption);
+    }
+    void searchOverlayKeepsTheStageAndTransportInPlace() {
+        HttpFixture server;
+        MainWindow window(server.url(), true);
+        window.resize(800, 480);
+        window.show();
+        auto *flow = window.coverFlow();
+        auto *transport = window.findChild<QFrame *>("transportPanel");
+        auto *panel = window.findChild<QFrame *>("librarySearchPanel");
+        QVERIFY(transport); QVERIFY(panel);
+        QTest::qWait(30);
+        const auto originalStage = flow->geometry();
+        const auto originalCover = flow->centreCoverRect();
+        const auto originalTransport = transport->geometry();
+        QToolButton *search = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>()) {
+            if (button->accessibleName() == "Open search") search = button;
+        }
+        QVERIFY(search);
+        QTest::mouseClick(search, Qt::LeftButton);
+        QTRY_VERIFY(panel->isVisible());
+        QCOMPARE(panel->parentWidget(), flow);
+        for (auto *button : panel->findChildren<QPushButton *>()) {
+            if (button->accessibleName() == "Open search keyboard") QTest::mouseClick(button, Qt::LeftButton);
+        }
+        QCoreApplication::processEvents();
+        QCOMPARE(flow->geometry(), originalStage);
+        QCOMPARE(flow->centreCoverRect(), originalCover);
+        QCOMPARE(transport->geometry(), originalTransport);
+        QTest::mouseClick(search, Qt::LeftButton);
+        QVERIFY(!panel->isVisible());
+        QCOMPARE(flow->geometry(), originalStage);
+    }
+    void browseButtonsHaveContextMenus() {
+        HttpFixture server;
+        MainWindow window(server.url(), true);
+        window.show();
+        const QMap<QString, QString> items{
+            {"Albums", "Favourite"}, {"Songs", "Group by album"}, {"Artists", "Browse artists"},
+            {"Playlists", "Playlist order"}, {"More", "Genres"}, {"Settings", "Appliance settings"}
+        };
+        int found = 0;
+        for (auto *button : window.findChildren<QToolButton *>()) {
+            const auto expected = items.value(button->accessibleName());
+            if (expected.isEmpty()) continue;
+            ++found;
+            QTest::mouseClick(button, Qt::LeftButton);
+            auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            QVERIFY(menu);
+            QCOMPARE(menu->accessibleName(), button->accessibleName() + " menu");
+            bool present = false;
+            for (const auto *action : menu->actions()) present |= action->text() == expected;
+            QVERIFY(present);
+            menu->hide();
+        }
+        QCOMPARE(found, items.size());
+    }
+    void returnsToPlayingAlbumAfterBrowsingAndClosingDrawer() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) {
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Playing album"},{"id":2,"title":"Other album"}],"total":2})"};
+            }
+            if (request.startsWith("GET /api/player/state")) {
+                return HttpFixture::Response{R"({"status":{"state":"play"},"song":{"file":"record/song.flac","albumId":1}})"};
+            }
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *flow = window.coverFlow();
+        QTRY_COMPARE(flow->visibleCoverCount(), 2);
+        QTRY_VERIFY(flow->accessibleDescription().startsWith("Unknown song\n"));
+        flow->select(1, false);
+        QTest::keyClick(flow, Qt::Key_Return);
+        QTRY_VERIFY(window.findChild<TrackDrawer *>());
+        QTest::qWait(5100);
+        QCOMPARE(flow->currentIndex(), 1);
+        QTest::keyClick(window.findChild<TrackDrawer *>()->findChild<QListView *>(), Qt::Key_Escape);
+        QTRY_VERIFY(!window.findChild<TrackDrawer *>());
+        QTest::qWait(4000);
+        QCOMPARE(flow->currentIndex(), 1);
+        QTRY_COMPARE_WITH_TIMEOUT(flow->currentIndex(), 0, 2500);
+        for (const auto &request : server.requests) QVERIFY(!request.startsWith("POST "));
+    }
+    void albumHeartFillsAndRestoresOnSaveError() {
+        HttpFixture server;
+        int posts = 0;
+        server.respond = [&posts](const QByteArray &request) {
+            if (request.startsWith("GET /api/library/albums")) {
+                return HttpFixture::Response{R"({"albums":[{"id":1,"title":"Album"}],"total":1})"};
+            }
+            if (request.startsWith("GET /api/library/favourites")) {
+                return HttpFixture::Response{R"({"albums":[],"tracks":[]})"};
+            }
+            if (request.startsWith("POST /api/library/favourites")) {
+                ++posts;
+                return posts == 1 ? HttpFixture::Response{R"({"ok":true,"starred":true})", 80}
+                                  : HttpFixture::Response{R"({"ok":false,"message":"Fixture error"})", 80};
+            }
+            return HttpFixture::Response{"{}"};
+        };
+        MainWindow window(server.url());
+        window.show();
+        auto *flow = window.coverFlow();
+        QTRY_COMPARE(flow->visibleCoverCount(), 1);
+        QTest::keyClick(flow, Qt::Key_Return);
+        QTRY_VERIFY(window.findChild<TrackDrawer *>());
+        QPushButton *heart = nullptr;
+        for (auto *button : window.findChild<TrackDrawer *>()->findChildren<QPushButton *>())
+            if (button->accessibleName() == "Favourite album") heart = button;
+        QVERIFY(heart);
+        QTRY_VERIFY(heart->isEnabled());
+        const auto outline = heart->icon().cacheKey();
+        QTest::mouseClick(heart, Qt::LeftButton);
+        QVERIFY(heart->isChecked());
+        QVERIFY(heart->icon().cacheKey() != outline);
+        QTRY_COMPARE(posts, 1);
+        QTest::qWait(125);
+        QTest::mouseClick(heart, Qt::LeftButton);
+        QVERIFY(!heart->isChecked());
+        QTRY_COMPARE(posts, 2);
+        QTRY_VERIFY(heart->isChecked());
+        int mutations = 0;
+        for (const auto &request : server.requests) {
+            if (!request.startsWith("POST /api/library/favourites")) continue;
+            const auto body = QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
+            QCOMPARE(body["albumId"].toString(), QString("1"));
+            QCOMPARE(body["starred"].toBool(), mutations++ == 0);
+        }
+        QCOMPARE(mutations, 2);
+        QTest::keyClick(window.findChild<TrackDrawer *>()->findChild<QListView *>(), Qt::Key_Escape);
+        QTRY_VERIFY(!window.findChild<TrackDrawer *>());
+        QToolButton *actions = nullptr;
+        for (auto *button : window.findChildren<QToolButton *>())
+            if (button->accessibleName() == "Album or song information actions") actions = button;
+        QVERIFY(actions); QVERIFY(actions->isVisible());
+        QTest::mouseClick(actions, Qt::LeftButton);
+        auto *infoMenu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        QVERIFY(infoMenu);
+        QCOMPARE(infoMenu->accessibleName(), QString("Album actions"));
+        const auto menuActions = infoMenu->actions();
+        QVERIFY(std::any_of(menuActions.begin(), menuActions.end(), [](const QAction *action) {
+            return action->text() == "More info";
+        }));
+        infoMenu->hide();
     }
     void albumStripBrowsesAcrossPagesWithoutChangingPlayback() {
         HttpFixture server;
@@ -212,6 +359,7 @@ private slots:
         QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, QPoint(row.right() - 8, row.center().y()));
         auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
         QVERIFY(menu);
+        for (const auto *action : menu->actions()) QVERIFY(action->text() != "Play song");
         QVERIFY(playRequest().isEmpty());
         menu->hide();
         QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, row.center());
@@ -470,6 +618,19 @@ private slots:
         const auto arriving = projectCover(.5, 100., {});
         const double gap = arriving.face[0].x() - departing.face[1].x();
         QVERIFY(gap > 4. && gap < 12.);
+    }
+    void outgoingCoverTurnsMoreThanTheCoverGlidingIn() {
+        const auto tilt = [](const CoverQuads &cover) {
+            return qAbs(cover.face[1].y() - cover.face[0].y());
+        };
+        const auto leftLeaving = projectCover(-.42, 100., {}, 3.);
+        const auto rightArriving = projectCover(.42, 100., {}, 3.);
+        QVERIFY(tilt(leftLeaving) > tilt(rightArriving) * 1.5);
+        QVERIFY(qAbs(tilt(leftLeaving) - tilt(projectCover(.42, 100., {}, -3.))) < .001);
+        QVERIFY(qAbs(tilt(rightArriving) - tilt(projectCover(-.42, 100., {}, -3.))) < .001);
+        QCOMPARE(projectCover(0., 100., {}, 3.).face, projectCover(0., 100., {}).face);
+        QCOMPARE(projectCover(1., 100., {}, 3.).face, projectCover(1., 100., {}).face);
+        QCOMPARE(leftLeaving.face[2].x(), leftLeaving.reflection[1].x());
     }
     void retargetingPreservesCoverVelocity() {
         const CoverMotion resting;

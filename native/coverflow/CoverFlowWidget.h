@@ -22,10 +22,14 @@ public:
     int visibleCoverCount() const;
     quint64 paintCount() const { return m_paints; }
     QRect centreCoverRect() const;
+    QRect captionRect() const;
+    int captionAlbumIndex() const { return m_captionRow; }
+    void setTransportInset(int pixels);
     void setPlayback(const PlayerState &state);
     void setCaptionClearance(int lowerEdge);
 signals:
     void selectionChanged(int index);
+    void navigationSettled();
     void activated(int index);
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -65,6 +69,7 @@ private:
     QStringList m_caption;
     bool m_captionShowsPlayback = false;
     int m_captionClearance = 0;
+    int m_transportInset = 0;
     quint64 m_paints = 0;
 };
 } // namespace PiTunes

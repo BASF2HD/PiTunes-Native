@@ -8,6 +8,7 @@
 class QLabel;
 class QModelIndex;
 class QListView;
+class QPushButton;
 
 namespace PiTunes {
 class CoverFlowWidget;
@@ -20,14 +21,14 @@ public:
                 const QVector<Track> &tracks, bool albumContext);
     void setPlayback(const PlayerState &state);
     void setReducedMotion(bool reduced);
+    void setAlbumFavourite(bool starred, bool ready);
     void open();
 
 signals:
     void dismissRequested();
     void playRequested(int row);
-    void trackFavouriteRequested(int row, bool starred);
+    void trackActionsRequested(int row, const QPoint &position);
     void albumFavouriteRequested();
-    void savePlaylistRequested();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -40,6 +41,7 @@ private:
     CoverFlowWidget *m_stage;
     QListView *m_list;
     QLabel *m_title;
+    QPushButton *m_heart = nullptr;
     TrackRowDelegate *m_rowDelegate;
     const QString m_heading;
     QVector<int> m_activeRows;
