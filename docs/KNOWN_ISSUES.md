@@ -36,10 +36,11 @@ video as the only display-failure test, or treating checksum/boot as usability.
 
 ## Native milestone limitations
 
-Native all-songs browse currently loads the first 200 entries; album paging is
-tested through 5,001 entries. Queue editor, complete playlist editing, native CSV
+Native album and all-songs shelves page in 200 entries at a time. Album paging
+is tested through 5,001 entries. Starting playback from the song shelf queues
+the loaded entries. Queue editor, complete playlist editing, native CSV
 save, smart rule evaluation/builder, radio favourites/removal, shared browse-context
-publishing/following, folder browsing, scan progress and complete preferences migration remain.
+publishing/following, scan progress and complete preferences migration remain.
 Settings forms compile but actual Linux privileges/receivers/mount/audio are not
 validated. On-screen keyboard currently covers Latin letters/punctuation, not a
 complete multilingual IME. Exact geometry/animation parity and physical touch
@@ -64,6 +65,6 @@ Qt 5 SVG Tiny does not support the backend placeholder's CSS rgba paints or
 pattern fills. The native artwork worker now adapts rgba to RGB/opacity (tested)
 and omits only the optional dotted texture of the known PiTunes generated cover.
 The existing backend/remote placeholder stays unchanged; exact native texture
-parity remains open. Native navigation does not yet publish shared browse context,
-so backend automatic continuation can use its default/previous remote sort and
-filter instead of the selected native view. Do not claim continuation context parity.
+parity remains open. Native album playback passes its active sort and filter
+to the continuation logic. Shared navigation context publishing and following
+remain open.

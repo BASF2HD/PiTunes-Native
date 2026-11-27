@@ -239,7 +239,8 @@ station shelves. Browse changes keep MPD’s queue independent. Saved stations a
 played by ID from the cover double-click or station action. The centred library
 search uses both result types. Trackpad wheel events stay inside scrollable lists,
 track titles can be selected, the footer has a full-view button, and Settings can
-browse folders on the server. Album rail dragging uses direct selection while held.
+browse folders on the server. The footer underline spans the responsive width of
+the active tab. Album rail dragging uses direct selection while held.
 NaviGlassPlayer’s independent position and rotation timing is applied to the
 existing 36-degree geometry, with stable rail-based stacking.
 
@@ -300,10 +301,10 @@ inspecting actual VM screenshots; backend/remote output remains intact.
 ## Remaining implementation and release gates
 
 See FEATURE_PARITY.md/KNOWN_ISSUES.md. Queue editor and full playlist edits, native CSV, smart builder/evaluator/
-playback, radio favourites/removal/reconnect, folder browsing, scan progress, shared
+playback, radio favourites/removal/reconnect, scan progress, shared
 context publishing/following, applied persisted preferences, touch focus/IME and
-precise visual parity remain. Missing native browse context can change backend
-automatic continuation's sort/filter. These are code gaps, not hardware blockers.
+precise visual parity remain. Album continuation uses the sort and filter saved
+at the start of playback.
 Settings forms and GUI-process health integration require further work/verification.
 
 No physical native boots or target performance/audio measurements. Actual 1 GB
