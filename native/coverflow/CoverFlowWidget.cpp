@@ -116,19 +116,21 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         const auto &album = *m_model->album(row);
         const auto poly = polygon(row - m_position, size, top);
         const auto *art = m_artwork->find(album.artUrl);
+        const QRectF reflection(poly[3] + QPointF(0, 3), poly[2] + QPointF(0, size * .44));
+        // Draw back to front. The nearer footprint replaces any farther
+        // reflection so its vertical fade blends only with the black floor.
+        painter.fillRect(reflection, Qt::black);
         if (art && !art->cover.isNull()) {
-            const auto draw = [&painter](const QImage &img, const QPolygonF &destination) {
-                const QPolygonF source({QPointF(0, 0), QPointF(img.width(), 0),
-                    QPointF(img.width(), img.height()), QPointF(0, img.height())});
-                QTransform projection;
-                if (QTransform::quadToQuad(source, destination, projection)) {
-                    painter.save(); painter.setTransform(projection, true); painter.drawImage(QPointF(0, 0), img); painter.restore();
-                }
-            };
-            QPolygonF reflection;
-            reflection << poly[3] + QPointF(0, 3) << poly[2] + QPointF(0, 3)
-                << poly[2] + QPointF(0, size * .44) << poly[3] + QPointF(0, size * .44);
-            draw(art->reflection, reflection); draw(art->cover, poly);
+            painter.drawImage(reflection, art->reflection);
+            const QPolygonF source({QPointF(0, 0), QPointF(art->cover.width(), 0),
+                QPointF(art->cover.width(), art->cover.height()), QPointF(0, art->cover.height())});
+            QTransform projection;
+            if (QTransform::quadToQuad(source, poly, projection)) {
+                painter.save();
+                painter.setTransform(projection, true);
+                painter.drawImage(QPointF(0, 0), art->cover);
+                painter.restore();
+            }
         } else {
             painter.setBrush(QColor::fromHsv((row * 37 + 210) % 360, 65, 42));
             painter.setPen(QColor("#55555d")); painter.drawPolygon(poly);

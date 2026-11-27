@@ -69,6 +69,11 @@ showed 9 covers at 480×800, 15 at 800×480 and 19 at 1440×520, with the same a
 selected. Debug and Release passed the 18-case suite, including the resize and
 rendered baseline regression. Physical-device frame rate remains unmeasured.
 
+Nearer CoverFlow reflections now mask farther reflections across their footprint.
+A pixel test reproduced colour mixing on the old renderer and passed on both
+sides after the change. Debug and Release passed all 19 native cases. The fix
+was also checked with local album artwork.
+
 ## Image and boot evidence
 
 Images are immutable development artifacts from e428678, preceding later UI fixes;

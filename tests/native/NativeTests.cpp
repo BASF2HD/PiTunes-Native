@@ -277,6 +277,44 @@ private slots:
             QCOMPARE(pixel(x, 279), QColor(Qt::black));
         }
     }
+    void nearerReflectionHidesItsNeighbour() {
+        HttpFixture server;
+        server.respond = [](const QByteArray &) {
+            return HttpFixture::Response{R"({"albums":[
+                {"id":"1","title":"Far left","artUrl":"/api/art?id=1"},
+                {"id":"2","title":"Near left","artUrl":"/api/art?id=2"},
+                {"id":"3","title":"Centre","artUrl":"/api/art?id=3"},
+                {"id":"4","title":"Near right","artUrl":"/api/art?id=4"},
+                {"id":"5","title":"Far right","artUrl":"/api/art?id=5"}],"total":5})"};
+        };
+        ApiClient api(server.url());
+        LibraryModel library(&api);
+        library.reload();
+        QTRY_COMPARE(library.rowCount(), 5);
+        ArtworkCache cache(&api);
+        for (int row = 0; row < library.rowCount(); ++row) {
+            QColor color = row == 0 || row == 4 ? Qt::red : Qt::green;
+            QImage cover(16, 16, QImage::Format_ARGB32_Premultiplied);
+            cover.fill(color);
+            QImage reflection(16, 8, QImage::Format_ARGB32_Premultiplied);
+            color.setAlpha(96);
+            reflection.fill(color);
+            cache.insert(library.album(row)->artUrl, {cover, reflection});
+        }
+        CoverFlowWidget widget(&library, &cache);
+        widget.resize(800, 400);
+        widget.select(2, false);
+        const auto frame = widget.grab().toImage();
+        const auto reflectedPixel = [&frame](int x) {
+            const auto scale = frame.devicePixelRatio();
+            return frame.pixelColor(qRound(x * scale), qRound(300 * scale));
+        };
+        // Red is still visible farther out, but cannot tint the translucent green.
+        QCOMPARE(reflectedPixel(650), QColor(96, 0, 0));
+        QCOMPARE(reflectedPixel(570), QColor(0, 96, 0));
+        QCOMPARE(reflectedPixel(610), reflectedPixel(570));
+        QCOMPARE(reflectedPixel(190), reflectedPixel(230));
+    }
 };
 QTEST_MAIN(NativeTests)
 #include "NativeTests.moc"
