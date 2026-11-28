@@ -264,6 +264,7 @@ def api_status():
         "playlistlength": playlist_length,
         "playlistposition": playlist_position,
         "updating_db": status.get("updating_db"),
+        "playbackError": status.get("error", ""),
         "repeat": status.get("repeat") == "1",
         "random": status.get("random") == "1",
         "single": status.get("single") == "1",
@@ -735,6 +736,7 @@ def compat_player_state():
             "bitrate": status.get("bitrate", 0),
             "playlistlength": status.get("playlistlength", 0),
             "playlistposition": status.get("playlistposition", 0),
+            "playbackError": status.get("playbackError", ""),
             "repeat": status.get("repeat", False),
             "single": status.get("single", False),
             "random": status.get("random", False),
@@ -1591,7 +1593,12 @@ def _mpd_add_uri(uri):
         mpd.command("add " + mpd_quote(uri))
         return uri
 
-    candidates = [uri, pitunes_stream_url(uri)]
+    try:
+        audio_stream_file({"file": [uri]})
+    except ApiError:
+        candidates = [uri]
+    else:
+        candidates = [uri, pitunes_stream_url(uri)]
     last_error = None
     for candidate in candidates:
         try:

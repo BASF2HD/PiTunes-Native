@@ -405,3 +405,10 @@ exercises the native scan, queue and decode path without a Python or MPD
 service. WASAPI routing and Windows 7 compatibility still require Windows
 testing. The independent ZIP workflow and same-hardware benchmark method are
 recorded in [Windows standalone](WINDOWS_STANDALONE.md).
+
+The first Atom follow-up QEMU runs booted successfully but failed playback.
+Instrumented state recorded MPD using `plughw:CARD=Intel,DEV=0`, and an HTTP
+404 decoding the loopback stream fallback. MPD created its empty tag cache
+before music USB discovery. Startup and successful mounts now request MPD
+indexing, storage-refresh events leave an active mount intact, and the client
+can display the asynchronous MPD failure reason. Rebuild and retest the image.

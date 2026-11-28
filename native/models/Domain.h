@@ -30,7 +30,7 @@ struct Track {
     static Track fromJson(const QJsonObject &object);
 };
 struct PlayerState {
-    QString source, state, repeatMode;
+    QString source, state, repeatMode, playbackError;
     Track track;
     double elapsed = 0, duration = 0;
     int volume = -1, queueLength = 0;

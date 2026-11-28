@@ -7,12 +7,16 @@ SETTINGS="/etc/pitunes/settings.json"
 NAS_CONFIG="/etc/pitunes/network-storage.json"
 MPD_UID="$(id -u mpd 2>/dev/null || echo 0)"
 AUDIO_GID="$(getent group audio 2>/dev/null | cut -d: -f3 || echo 0)"
+exec 9>/run/lock/pitunes-music.lock
+flock -w 20 9
 if ! mountpoint -q "${MOUNTPOINT}"; then
   install -d -m 0775 -o mpd -g audio "${MOUNTPOINT}"
 fi
 install -d -m 0775 -o mpd -g audio "${INTERNAL_MUSIC}"
 
 notify_scan() {
+  # This asks MPD to update in the background; it does not wait for indexing.
+  mpc -h 127.0.0.1 update >/dev/null 2>&1 || true
   curl -fsS -X POST http://127.0.0.1:8080/api/library/rescan >/dev/null 2>&1 || true
 }
 
@@ -70,7 +74,15 @@ print("LOCAL_DEVICE="+shlex.quote(str(c.get("local_device", ""))))
 eval "${SETTINGS_EXPORT:-SOURCE=local}"
 
 if mountpoint -q "${MOUNTPOINT}"; then
-  umount "${MOUNTPOINT}" 2>/dev/null || true
+  if [ "${1:-}" = --refresh ]; then
+    # A udev add/change on an unrelated partition must not interrupt playback.
+    exit 0
+  fi
+  umount "${MOUNTPOINT}"
+fi
+
+if [ "${1:-}" = --refresh ] && [ "${SOURCE}" != local ]; then
+  exit 0
 fi
 
 if [ "${SOURCE}" = "network" ]; then

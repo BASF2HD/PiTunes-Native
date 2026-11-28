@@ -54,6 +54,7 @@ PlayerState PlayerState::fromJson(const QJsonObject &o) {
     const auto s = o["status"].isObject() ? o["status"].toObject() : o;
     p.source = textValue(o["inputSource"]);
     p.state = textValue(s["state"]);
+    p.playbackError = textValue(s["playbackError"]);
     p.track = Track::fromJson(o["song"].isObject() ? o["song"].toObject() : s["song"].toObject());
     if (p.track.bitRate <= 0.) p.track.bitRate = numberValue(s["bitrate"]);
     p.elapsed = qMax(0., numberValue(s["elapsed"]));

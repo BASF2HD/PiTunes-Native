@@ -4,4 +4,4 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl restart pitunes-mount.service
+ExecStart=/opt/pitunes/scripts/mount-music-drive.sh --refresh

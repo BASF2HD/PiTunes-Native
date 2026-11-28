@@ -839,6 +839,8 @@ void MainWindow::refreshPlayer() {
         const auto previousState = m_player.state;
         const auto previousAlbum = m_player.track.albumId;
         m_player = PlayerState::fromJson(object);
+        if (m_player.state == "stop" && !m_player.playbackError.isEmpty())
+            setMessage(m_player.playbackError);
         const bool playing = m_player.state == "play";
         if (playing != m_play->property("playing").toBool()) {
             m_play->setProperty("playing", playing);
