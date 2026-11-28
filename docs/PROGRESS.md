@@ -354,3 +354,7 @@ contract suite passed, including seek width/centre alignment, Lightweight
 render sampling, monitor CSV and the disabled sampler. Python discovery
 passed 40 tests, JavaScript passed 24 tests, and the release validator passed.
 No physical performance metrics were collected in this workspace.
+
+The first Linux package run for this change caught a Linux-only missing
+`QCoreApplication` include in the monitor. It reproduced on both PC targets
+and was corrected in a follow-up. The hosted backend and release checks passed.

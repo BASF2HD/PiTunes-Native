@@ -1,5 +1,6 @@
 #include "PerformanceMonitor.h"
 #include "coverflow/CoverFlowWidget.h"
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
