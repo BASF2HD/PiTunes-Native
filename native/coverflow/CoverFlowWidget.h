@@ -28,6 +28,8 @@ public:
     void select(int index, bool animate = true);
     void setReducedMotion(bool reduced);
     void setAnimationMode(AnimationMode mode);
+    void setFrameRate(int framesPerSecond);
+    int frameRate() const { return m_frameRate; }
     AnimationMode animationMode() const { return m_animationMode; }
     bool reducedMotion() const { return m_animationMode == AnimationMode::Off; }
     void setFrameSampling(bool enabled);
@@ -93,6 +95,8 @@ private:
     QPointF m_press;
     QVector<QPair<int, QPolygonF>> m_hits;
     QImage m_motionSurface;
+    double m_motionScale = 1.;
+    int m_fastFrames = 0, m_frameRate = 30;
     PlayerState m_captionPlayback;
     QStringList m_playingCaption;
     QStringList m_caption;

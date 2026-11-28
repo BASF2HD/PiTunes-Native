@@ -18,7 +18,16 @@ install -D -m 0644 "${here}/mount-music.service" /etc/systemd/system/pitunes-mou
 install -D -m 0755 "${here}/hardware-report.py" /usr/local/libexec/pitunes-pc/hardware-report
 install -D -m 0644 "${here}/hardware-report.service" /etc/systemd/system/pitunes-pc-hardware-report.service
 install -D -m 0644 "${here}/hardware-report.timer" /etc/systemd/system/pitunes-pc-hardware-report.timer
-systemctl enable pitunes-pc-hardware-report.timer
+install -D -m 0644 "${here}/b43-firmware.service" /etc/systemd/system/pitunes-b43-firmware.service
+install -D -m 0644 "${here}/pc-audio.service" /etc/systemd/system/pitunes-pc-audio.service
+systemctl enable pitunes-pc-hardware-report.timer pitunes-b43-firmware.service pitunes-pc-audio.service
+if [[ "$(cat /etc/pitunes-pc-image)" = i386 ]]; then
+  install -d /etc/modules-load.d
+  printf 'snd_hda_intel\n' >/etc/modules-load.d/pitunes-hda.conf
+  install -D -m 0755 "${here}/bcm4312-wl.sh" /usr/local/libexec/pitunes-pc/bcm4312-wl
+  install -D -m 0644 "${here}/bcm4312-wl.service" /etc/systemd/system/pitunes-bcm4312-wl.service
+  systemctl enable pitunes-bcm4312-wl.service
+fi
 
 install -d /etc/X11/xorg.conf.d
 cat > /etc/X11/xorg.conf.d/90-pitunes-touchpad.conf <<'EOF'

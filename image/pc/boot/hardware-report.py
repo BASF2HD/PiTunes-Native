@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -177,10 +178,57 @@ def collect():
         yield f"{key}: {count}"
 
 
+def install_b43(source, destination):
+    if source.is_symlink() or not source.is_dir():
+        raise RuntimeError("INSTALL-B43 must be a directory of extracted firmware.")
+    if destination.exists() or destination.is_symlink():
+        if (destination / "ucode15.fw").is_file():
+            return "b43 firmware is already installed. Remove INSTALL-B43 from the boot partition."
+        raise RuntimeError("Existing b43 firmware directory is incomplete. Preserve it and repair it from Debian Live.")
+
+    files = sorted(source.iterdir())
+    if not 1 <= len(files) <= 128 or not any(file.name == "ucode15.fw" for file in files):
+        raise RuntimeError("INSTALL-B43 must include ucode15.fw and its matching firmware files.")
+    total = 0
+    for file in files:
+        info = file.lstat()
+        if (not stat.S_ISREG(info.st_mode) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,47}\.fw", file.name)
+                or not 1 <= info.st_size <= 512 * 1024):
+            raise RuntimeError("INSTALL-B43 contains an invalid firmware file.")
+        total += info.st_size
+    if total > 4 * 1024 * 1024:
+        raise RuntimeError("INSTALL-B43 exceeds the firmware size limit.")
+
+    with tempfile.TemporaryDirectory(prefix=".pitunes-firmware-", dir=destination.parent) as temporary:
+        staged = Path(temporary) / "b43"
+        staged.mkdir(mode=0o755)
+        for file in files:
+            with file.open("rb") as stream:
+                payload = stream.read(512 * 1024 + 1)
+            if not 1 <= len(payload) <= 512 * 1024:
+                raise RuntimeError("The firmware changed while copying.")
+            target = staged / file.name
+            target.write_bytes(payload)
+            target.chmod(0o644)
+        staged.rename(destination)
+    return "b43 firmware installed. Remove INSTALL-B43 and restart PiTunes to load it."
+
+
 def main():
     destination = boot_partition()
-    name = "pitunes-display.log" if sys.argv[1:] == ["--display-failure"] else "pitunes-hardware.txt"
-    report = "\n".join(collect()) + "\n"
+    failed = False
+    if sys.argv[1:] == ["--install-b43"]:
+        name = "b43-install.txt"
+        try:
+            if not Path("/sys/module/b43").is_dir():
+                raise RuntimeError("The b43 driver is absent. Verify the PCI ID and select the matching firmware.")
+            report = install_b43(destination / "INSTALL-B43", Path("/lib/firmware/b43")) + "\n"
+        except (OSError, RuntimeError) as error:
+            failed = True
+            report = str(error) + "\n"
+    else:
+        name = "pitunes-display.log" if sys.argv[1:] == ["--display-failure"] else "pitunes-hardware.txt"
+        report = "\n".join(collect()) + "\n"
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination, prefix=".pitunes-report-",
@@ -194,6 +242,8 @@ def main():
         if temporary:
             temporary.unlink(missing_ok=True)
     print(f"Saved {name} on the PITUNES_EFI partition.")
+    if failed:
+        raise RuntimeError(report.strip())
 
 
 if __name__ == "__main__":

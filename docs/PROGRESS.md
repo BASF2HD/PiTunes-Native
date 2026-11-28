@@ -376,3 +376,21 @@ local process inspection with remote browser assets served by nginx.
 [Smoke evidence](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46092554755/artifacts/15241698180).
 The verified image's report can omit model strings containing commas or @.
 A fixture-tested follow-up accepts that punctuation in the source.
+
+## Second Atom hardware pass
+
+The owner measured 4.4–7.0 animation FPS, a 124.58 ms mean and 189.56 ms peak
+paint, 315/988 MiB RAM and 0 KiB/s reads in the detailed sample. PiTunes Native
+accounted for 48.7% of all logical CPU time. First centred artwork took
+31,832 ms. These are physical observations from the earlier image, not averages
+over the run. The photo also shows MPD rejecting Next while stopped.
+The owner then confirmed the N280/945GSE/ALC272/BCM4312 stack in antiX.
+
+The follow-up defaults to Full, offers 15/20/30 FPS limits, precomposes opaque
+reflections and adapts animation raster sampling density when paint runs long.
+The i386 image includes the Intel DDX for supported legacy adapters. PC audio
+merges ALSA and kernel PCM discovery, prefers the detected built-in analogue PCM
+for automatic MPD startup, and supports reported speaker/headphone/auto-mute
+controls. The guarded test tone and MPD stopped-queue/file-indexing fixes have
+fixture coverage. A local driver preference and offline preparation guide
+cover the BCM4312. Physical playback, Wi-Fi and animation remain to retest.

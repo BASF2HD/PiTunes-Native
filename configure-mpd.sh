@@ -83,6 +83,9 @@ sed -i 's/${MIXER_TYPE}/'"${MIXER_TYPE}"'/' "${config}"
 case "${MODE}" in
   pc-alsa)
     sed -i "/name .*ALSA default/a\\        device          \"${ALSA_DEVICE}\"" "${config}"
+    if [ "${ALSA_DEVICE}" = default ]; then
+      sed -i '/device *"default"/i\        # PiTunes automatic playback device' "${config}"
+    fi
     if [ -n "${MIXER_CONTROL}" ]; then
       sed -i "/mixer_type/a\\        mixer_device    \"hw:CARD=${card}\"\n        mixer_control   \"${MIXER_CONTROL}\"" "${config}"
     fi

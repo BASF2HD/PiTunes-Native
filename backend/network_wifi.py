@@ -211,6 +211,22 @@ def _ethernet_status(interfaces: dict[str, dict], default_route: dict) -> dict:
     }
 
 
+def _pci_wifi_devices(root: Path = Path("/sys/bus/pci/devices")) -> list[dict[str, str]]:
+    devices = []
+    for entry in sorted(root.glob("*")):
+        try:
+            device_class = (entry / "class").read_text().strip()
+            vendor = (entry / "vendor").read_text().strip().removeprefix("0x")
+            device = (entry / "device").read_text().strip().removeprefix("0x")
+        except OSError:
+            continue
+        if not device_class.startswith("0x0280") or not re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{4}", f"{vendor}:{device}"):
+            continue
+        driver = entry / "driver"
+        devices.append({"id": f"{vendor}:{device}", "driver": driver.resolve().name if driver.is_symlink() else ""})
+    return devices
+
+
 def _wifi_diagnostics(interface: str) -> dict:
     def value(path: Path) -> str:
         try:
@@ -244,6 +260,7 @@ def _wifi_diagnostics(interface: str) -> dict:
         "hard_blocked": any(r["hard"] for r in blocked),
         "soft_blocked": any(r["soft"] for r in blocked),
         "radio": radio_state,
+        "pci_devices": _pci_wifi_devices(),
         "b43_loaded": b43,
         "b43_ucode15_present": b43_files,
     }

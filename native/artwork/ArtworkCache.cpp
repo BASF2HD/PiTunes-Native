@@ -79,16 +79,23 @@ Artwork ArtworkCache::decode(const QByteArray &data, int size) {
     }
     if (decoded.isNull()) return result;
     result.cover = decoded.scaled(edge, edge, Qt::KeepAspectRatio, Qt::SmoothTransformation)
-                           .convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    result.reflection = result.cover.mirrored(false, true).copy(0, 0, result.cover.width(), result.cover.height() / 2);
+                           .convertToFormat(decoded.hasAlphaChannel() ? QImage::Format_ARGB32_Premultiplied
+                                                                      : QImage::Format_RGB32);
+    const auto reflected = result.cover.mirrored(false, true);
+    const QRect source(0, 0, result.cover.width(), result.cover.height() / 2);
+    result.reflection = QImage(source.size(), QImage::Format_RGB32);
+    result.reflection.fill(Qt::black);
     QPainter painter(&result.reflection);
-    painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+    // Screen the artwork against black here, once per thumbnail, instead of
+    // masking and alpha-blending every projected reflection on every frame.
+    painter.drawImage(QPoint(0, 0), reflected, source);
     QLinearGradient fade(0, 0, 0, result.reflection.height());
-    fade.setColorAt(0, QColor(0, 0, 0, 95));
-    fade.setColorAt(.40, QColor(0, 0, 0, 78));
-    fade.setColorAt(.66, QColor(0, 0, 0, 61));
-    fade.setColorAt(1, QColor(0, 0, 0, 0));
+    fade.setColorAt(0, QColor(0, 0, 0, 160));
+    fade.setColorAt(.40, QColor(0, 0, 0, 177));
+    fade.setColorAt(.66, QColor(0, 0, 0, 194));
+    fade.setColorAt(1, Qt::black);
     painter.fillRect(result.reflection.rect(), fade);
+    painter.end();
     return result;
 }
 void ArtworkCache::pump() {

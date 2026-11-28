@@ -26,7 +26,7 @@ native implementation work. Implementation state is recorded in PROGRESS.
 | ADR-018 | Use platform-neutral system output labels | Settings checks the API host before using macOS CoreAudio controls. MPD keeps playing through the system default output. The explicit output action changes the Mac default and requires no appliance route change. The preview also displays the appliance routes and device catalogue. Applying those routes remains available when connected to an appliance. |
 
 | ADR-019 | Reuse the inherited radio directory, icon proxy and station store | The native dialog separates play from save. It requests artwork for visible rows through the existing API with a short cold-cache wait, decodes 64 px thumbnails asynchronously, and shows initials when a logo is unavailable. Existing remote clients keep the immediate fallback. |
-| ADR-020 | Select Lightweight animation on low-memory devices | Retain time-based pose interpolation with a smaller cover window, artwork budget and reflection cost. Full and explicit Off remain available. |
+| ADR-020 | Default to Full and adapt animation raster cost | The physical Atom test showed high frame cost with RAM available. Keep full geometry and use a measured render budget. Retain manual Lightweight/Off and frame-rate limits. |
 | ADR-021 | Sample native performance only when requested | Linux counters and opt-in QPainter timing feed a separate Qt text window. CSV samples stay bounded and are saved in one transaction. |
 | ADR-022 | Export classified boot observations to the verified boot FAT partition | Driver and service evidence survives offline USB boot without exporting raw logs, credentials or music filenames. |
 

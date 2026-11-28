@@ -59,6 +59,7 @@ PlayerState PlayerState::fromJson(const QJsonObject &o) {
     p.elapsed = qMax(0., numberValue(s["elapsed"]));
     p.duration = qMax(0., numberValue(s["duration"], p.track.duration));
     p.volume = qBound(-1, int(numberValue(s["volume"], -1)), 100);
+    p.queueLength = qBound(0., numberValue(s["playlistlength"]), 100000.);
     p.shuffle = boolValue(s["random"]);
     p.repeatMode = !boolValue(s["repeat"]) ? "off" : boolValue(s["single"]) ? "song" : "all";
     return p;

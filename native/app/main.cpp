@@ -2,7 +2,6 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QFileInfo>
-#include <QFile>
 #include <QTimer>
 
 int main(int argc, char **argv) {
@@ -39,13 +38,7 @@ int main(int argc, char **argv) {
         "QAbstractScrollArea::corner{background:transparent;}"
         "QTabBar::tab{padding:10px;}QTabBar::tab:selected{border-bottom:2px solid white;}"
         "QSlider::groove:horizontal{height:3px;background:#555;}QSlider::handle:horizontal{background:white;width:12px;margin:-5px 0;border-radius:6px;}");
-    bool lightweight = false;
-    QFile memory("/proc/meminfo");
-    if (memory.open(QIODevice::ReadOnly)) {
-        const auto firstLine = memory.readLine().simplified().split(' ');
-        if (firstLine.size() >= 2 && firstLine[0] == "MemTotal:") lightweight = firstLine[1].toLongLong() <= 1100000;
-    }
-    PiTunes::MainWindow window(api, parser.isSet("demo"), parser.isSet("reduced-motion"), lightweight);
+    PiTunes::MainWindow window(api, parser.isSet("demo"), parser.isSet("reduced-motion"));
     if (parser.isSet("window-size")) {
         const auto parts = parser.value("window-size").split('x');
         if (parts.size() == 2) window.resize(qBound(320, parts[0].toInt(), 3840), qBound(320, parts[1].toInt(), 2160));

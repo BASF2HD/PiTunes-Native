@@ -75,9 +75,9 @@ try:
 except ImportError:
     mount_selected_storage = network_storage_configure = network_storage_status = None  # type: ignore
 try:
-    from audio_output import apply_audio_output, audio_devices_payload, normalize_route
+    from audio_output import apply_audio_output, apply_pc_mixer, audio_devices_payload, normalize_route, test_pc_audio
 except ImportError:
-    apply_audio_output = None  # type: ignore
+    apply_audio_output = apply_pc_mixer = test_pc_audio = None  # type: ignore
     audio_devices_payload = None  # type: ignore
     normalize_route = None  # type: ignore
 try:
@@ -1850,7 +1850,13 @@ def compat_player_post(path, body):
                 "entryId": body.get("entryId"),
                 "continuous": body.get("continuous", True),
             })
-        mpd.command("pause 0")
+        state = mpd.single_map("status")
+        if state.get("state") == "stop":
+            if state.get("playlistlength", "0") == "0":
+                raise ApiError(409, "The playback queue is empty. Choose a song or album to play.")
+            mpd.command("play")
+        elif state.get("state") == "pause":
+            mpd.command("pause 0")
         return compat_player_state()
     if path == "/api/player/pause":
         if clear_continuous_playback:
@@ -2163,6 +2169,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(result)
             elif parsed.path == "/api/services/control":
                 self.send_json(control_service(post_json(self)))
+            elif parsed.path in ("/api/audio/mixer", "/api/audio/test"):
+                handler = apply_pc_mixer if parsed.path == "/api/audio/mixer" else test_pc_audio
+                if handler is None:
+                    raise ApiError(404, "PC audio controls unavailable.")
+                if handler is test_pc_audio and mpd.single_map("status").get("state") != "stop":
+                    raise ApiError(409, "Stop music playback before testing the selected device.")
+                try:
+                    self.send_json(handler(post_json(self)))
+                except ValueError as exc:
+                    raise ApiError(400, str(exc)) from exc
+                except RuntimeError as exc:
+                    raise ApiError(409, str(exc)) from exc
             elif parsed.path == "/api/audio/output":
                 if not apply_audio_output:
                     self.send_json({"ok": True, "message": "Audio output API unavailable."})

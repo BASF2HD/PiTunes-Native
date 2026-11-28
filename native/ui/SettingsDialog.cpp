@@ -241,7 +241,7 @@ void populateMacOutputs(QComboBox *choice) {
 }
 
 SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *parent,
-                               AnimationMode animation, PerformanceMonitor *monitor, bool forceReducedMotion)
+                               AnimationMode animation, PerformanceMonitor *monitor, bool forceReducedMotion, int animationFrameRate)
     : QDialog(parent) {
     setWindowTitle("Application settings"); resize(650, 490);
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
@@ -375,6 +375,17 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         connect(modes, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
             emit animationModeChanged(AnimationMode(index));
         });
+        auto *rate = comboBox(system);
+        for (const int fps : {15, 20, 30}) rate->addItem(QString("%1 FPS").arg(fps), fps);
+        rate->setCurrentIndex(rate->findData(animationFrameRate));
+        rate->setEnabled(!forceReducedMotion && animation != AnimationMode::Off);
+        system->addRow("CoverFlow frame limit", rate);
+        connect(rate, QOverload<int>::of(&QComboBox::activated), this, [this, rate](int index) {
+            emit animationFrameRateChanged(rate->itemData(index).toInt());
+        });
+        connect(modes, QOverload<int>::of(&QComboBox::currentIndexChanged), rate, [rate, forceReducedMotion](int index) {
+            rate->setEnabled(!forceReducedMotion && index != int(AnimationMode::Off));
+        });
         if (!monitor) return;
         auto *display = comboBox(system);
         display->addItems({"Off", "Compact overlay", "Detailed monitor"});
@@ -452,10 +463,12 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
             audio->addRow(description);
         }
         auto *route = comboBox(audio); auto *device = comboBox(audio); auto *hat = comboBox(audio);
+        device->setObjectName("applianceAudioDevice");
         auto *mixer = comboBox(audio); mixer->addItems({"software", "hardware", "none"});
         route->setObjectName("applianceAudioRoute");
         audio->addRow("Output", route);
-        audio->addRow("ALSA device", device);
+        auto *deviceLabel = new QLabel("ALSA device");
+        audio->addRow(deviceLabel, device);
         audio->addRow("Pi DAC HAT", hat);
         audio->addRow("Mixer", mixer);
         auto *mixerControl = comboBox(audio);
@@ -465,21 +478,84 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         ports->setWordWrap(true);
         audio->addRow(ports);
         mixerLabel->hide(); mixerControl->hide(); ports->hide();
+        auto *portRow = new QWidget;
+        auto *portLayout = new QHBoxLayout(portRow);
+        portLayout->setContentsMargins(0, 0, 0, 0);
+        auto *portControl = comboBox(audio);
+        auto *portState = comboBox(audio);
+        auto *portVolume = new QSpinBox(portRow);
+        portVolume->setRange(0, 100);
+        portVolume->setSuffix("%");
+        auto *applyPort = new QPushButton("Set", portRow);
+        portLayout->addWidget(portControl, 1);
+        portLayout->addWidget(portState);
+        portLayout->addWidget(portVolume);
+        portLayout->addWidget(applyPort);
+        auto *portLabel = new QLabel("Speaker / headphone");
+        audio->addRow(portLabel, portRow);
+        portLabel->hide(); portRow->hide();
+        const auto showPort = [=] {
+            const auto info = portControl->currentData().toJsonObject();
+            const auto state = textValue(info["state"]);
+            const bool automatic = textValue(info["name"]) == "Auto-Mute Mode";
+            portState->clear();
+            if (automatic) {
+                portState->addItems({"Enabled", "Disabled"});
+                portState->setCurrentText(state);
+            } else {
+                portState->addItems({"Unmuted", "Muted"});
+                portState->setCurrentIndex(state == "off" ? 1 : 0);
+            }
+            const bool haveVolume = boolValue(info["volume"]) && info["percent"].isDouble();
+            portVolume->setVisible(haveVolume);
+            if (haveVolume) portVolume->setValue(info["percent"].toInt());
+        };
+        connect(portControl, QOverload<int>::of(&QComboBox::currentIndexChanged), this, showPort);
+        connect(applyPort, &QPushButton::clicked, this, [=] {
+            const auto info = portControl->currentData().toJsonObject();
+            const auto name = textValue(info["name"]);
+            const QString state = name == "Auto-Mute Mode" ? portState->currentText()
+                : portState->currentIndex() == 0 ? "unmute" : "mute";
+            QJsonObject command{{"alsa", device->currentData().toString()}, {"control", name}, {"state", state}};
+            if (!portVolume->isHidden()) command.insert("percent", portVolume->value());
+            api->post("/api/audio/mixer", command, result);
+        });
+        auto *testOutput = new QPushButton("Test Audio…", this);
+        audio->addRow(testOutput);
+        testOutput->hide();
+        connect(testOutput, &QPushButton::clicked, this, [=] {
+            if (QMessageBox::question(this, "Test Audio",
+                    "A short tone will play on the selected device. Lower the speaker or headphone volume first.")
+                    != QMessageBox::Yes) return;
+            api->post("/api/audio/test", {{"alsa", device->currentData().toString()}}, result);
+        });
         const auto refreshControls = [=] {
             const auto previous = mixerControl->currentData().toString();
             mixerControl->clear();
             mixerControl->addItem("Automatic", "");
             QStringList status;
+            const auto previousPort = textValue(portControl->currentData().toJsonObject()["name"]);
+            portControl->clear();
             for (const auto &entry : device->currentData(Qt::UserRole + 1).toJsonArray()) {
                 const auto info = entry.toObject();
                 const auto name = textValue(info["name"]);
                 if (boolValue(info["volume"])) mixerControl->addItem(name, name);
+                if (boolValue(info["port"]) || name == "Auto-Mute Mode") portControl->addItem(name, info);
                 const auto state = textValue(info["state"]);
                 if (!state.isEmpty()) status << name + ": " + state;
             }
             const int selected = mixerControl->findData(previous);
             if (selected >= 0) mixerControl->setCurrentIndex(selected);
             const bool pc = route->currentData().toString() == "pc-alsa";
+            const int chosenPort = portControl->findText(previousPort);
+            if (chosenPort >= 0) portControl->setCurrentIndex(chosenPort);
+            const bool showPorts = !preview && pc && device->currentData(Qt::UserRole + 2).toString() == "analog"
+                && portControl->count() > 0;
+            portLabel->setVisible(showPorts);
+            portRow->setVisible(showPorts);
+            testOutput->setVisible(!preview && pc);
+            testOutput->setEnabled(device->currentIndex() > 0);
+            showPort();
             const bool showControl = pc && mixer->currentText() == "hardware" && mixerControl->count() > 1;
             mixerControl->setVisible(showControl);
             mixerLabel->setVisible(showControl);
@@ -499,26 +575,34 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
                 }, 90000);
         });
         applyOutput->setEnabled(false);
-        api->get("/api/audio/devices", [=](QJsonObject o, QString error) {
+        auto *refreshOutputs = new QPushButton("Refresh outputs", this);
+        audio->addRow(refreshOutputs);
+        const auto readOutputs = [=] {
+            refreshOutputs->setEnabled(false);
+            api->get("/api/audio/devices", [=](QJsonObject o, QString error) {
             if (!guard) return;
+            refreshOutputs->setEnabled(true);
             if (!error.isEmpty()) { result(o, error); return; }
+            route->clear(); device->clear(); hat->clear();
             const bool pc = textValue(o["platform"]) == "pc";
-            if (pc) {
-                route->addItem("ALSA playback", "pc-alsa");
-                audio->labelForField(hat)->hide();
-                hat->hide();
-            }
+            audio->labelForField(route)->setVisible(!pc);
+            route->setVisible(!pc);
+            audio->labelForField(hat)->setVisible(!pc);
+            hat->setVisible(!pc);
+            deviceLabel->setText(pc ? "Output device" : "ALSA device");
+            if (pc) route->addItem("ALSA playback", "pc-alsa");
             for (const auto &v : pc ? QJsonArray{} : o["routes"].toArray()) {
                 const auto r = v.toObject();
                 route->addItem(r.isEmpty() ? textValue(v) : textValue(r["label"]), r.isEmpty() ? textValue(v) : textValue(r["id"]));
             }
-            device->addItem("ALSA default", "default");
+            device->addItem(pc ? "Automatic (prefer built-in audio)" : "ALSA default", "default");
             for (const auto &v : o["devices"].toArray()) {
                 const auto d = v.toObject();
                 const auto id = textValue(d["alsa"]);
                 if (id == "default") continue;
                 device->addItem(textValue(d["label"]), id);
                 device->setItemData(device->count() - 1, d["controls"].toArray(), Qt::UserRole + 1);
+                device->setItemData(device->count() - 1, textValue(d["kind"]), Qt::UserRole + 2);
             }
             if (pc && device->count() == 1) result({}, "No ALSA playback devices detected. Check the hardware report.");
             for (const auto &v : o["hats"].toArray()) { const auto h = v.toObject(); hat->addItem(textValue(h["label"]), textValue(h["id"])); }
@@ -542,8 +626,11 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
             refreshControls();
             const int control = mixerControl->findData(textValue(current["mixer_control"]));
             if (control >= 0) mixerControl->setCurrentIndex(control);
-            applyOutput->setEnabled(!preview && (pc ? device->count() > 1 : route->count() > 0));
-        });
+            applyOutput->setEnabled(!preview && route->count() > 0);
+            }, 20000);
+        };
+        connect(refreshOutputs, &QPushButton::clicked, this, readOutputs);
+        readOutputs();
     };
 #ifdef Q_OS_MACOS
     const auto host = api->baseUrl().host();
@@ -600,8 +687,14 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
                 if (!radio.isEmpty()) status += " · Radio " + radio;
                 if (boolValue(diagnostics["hard_blocked"])) status += "\nWi-Fi blocked by a hardware switch.";
                 else if (boolValue(diagnostics["soft_blocked"])) status += "\nWi-Fi is software-blocked.";
+                for (const auto &device : diagnostics["pci_devices"].toArray()) {
+                    const auto observation = device.toObject();
+                    const auto id = textValue(observation["id"]);
+                    const auto bound = textValue(observation["driver"]);
+                    if (!id.isEmpty()) status += "\nWireless PCI ID: " + id + (bound.isEmpty() ? " · no driver" : " · " + bound);
+                }
                 if (boolValue(diagnostics["b43_loaded"]) && !boolValue(diagnostics["b43_ucode15_present"]))
-                    status += "\nb43 is loaded. ucode15.fw was not found in the firmware directories.";
+                    status += "\nb43 firmware missing. See the Atom hardware guide for offline installation.";
             }
             netStatus->setText(status);
         }, 30000);

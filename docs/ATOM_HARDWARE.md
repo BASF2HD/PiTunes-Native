@@ -109,3 +109,60 @@ failure and power loss. The original USB is the recovery environment, and
 recovery must support inspecting and repairing the selected disk without
 modifying the others. Release remains gated on those tests and the physical
 hardware acceptance checks. There is no internal-disk write path in this build.
+
+## Updated on-device workflow
+
+The regular template now opens in Full animation mode. Settings → System offers
+15, 20 and 30 FPS frame limits. The renderer keeps the chosen geometry and
+reduces temporary raster sampling density when a frame overruns its budget.
+The panel stops repainting at rest. 15/20/30 are limits.
+
+In PC Audio, select the analogue **Output device**. Automatic also resolves
+a detected built-in analogue PCM before the MPD service starts. Selecting the
+analogue PCM explicitly exposes the reported speaker and headphone settings.
+Auto-Mute is the codec's own jack-sense behavior. The test button plays a
+half-second low-level tone only after confirmation and while MPD is stopped.
+Existing mixer levels are left alone at boot.
+
+When macOS sees the USB under `diskutil list external physical` but Finder does
+not mount it, identify the FAT EFI partition by its size (134 MB) and use
+`diskutil mount readOnly` with that partition identifier. The larger Linux
+partition stays unmounted on macOS. Decline any Initialize prompt. If the
+drive disappears from Disk Utility, the partition cannot be read until the
+USB connection is re-established. Debian or antiX Live can mount the FAT
+partition and retrieve the same report. Network settings now also displays
+wireless PCI IDs when a driver has failed to bind.
+
+## Offline Broadcom STA path
+
+Debian Bookworm's `broadcom-sta-dkms` lists BCM4312. Kernel modules compiled
+for antiX's 5.10 kernel cannot run against the Debian 12 PiTunes kernel.
+Prepare the module before the first PiTunes boot by using a disposable
+Debian Bookworm i386 system with network access. Enable Debian `non-free` only
+in that preparation system. Install `broadcom-sta-dkms` and the exact
+`linux-headers-<release>-686-pae` for the **PiTunes** image, then run
+`sudo dkms autoinstall -k <exact-release>`. Check the output with
+`modinfo -k <exact-release> -F vermagic wl`. The image's kernel release can be
+read from its Linux partition under `lib/modules/`.
+
+For an offline first boot, copy the resulting release-matched module into the
+same kernel's `lib/modules/<exact-release>/updates/` on the mounted PiTunes
+Linux **USB** partition from antiX/Debian. Run `sudo depmod -b <PiTunes mount>
+<exact-release>` to index it. Keep the primary disk untouched. This avoids
+installing the Debian package's global module blacklists into PiTunes. When a
+local `wl` is available, the i386 service can prefer it specifically on
+`14e4:4315` and restore that device's previous binding on failure. Other Wi-Fi
+devices keep their drivers. Validate the exact PCI ID on the Atom before use.
+
+The public image does not contain the Broadcom STA binary. Debian distributes
+it in `non-free` under a separate licence that conditions redistribution on
+the complete, unmodified software, accompanying terms and other obligations.
+An owner can prepare the driver locally from Debian. For the b43 alternative,
+place the already-extracted official `b43` firmware files in `INSTALL-B43` on
+the boot FAT partition. The explicit folder triggers one installation when
+the b43 driver is present. Read `b43-install.txt`, remove the folder and
+reboot. Choose one driver strategy according to the hardware and available
+firmware. Neither driver selection has been physically verified in PiTunes.
+
+[Debian Broadcom STA](https://packages.debian.org/bookworm/broadcom-sta-dkms)
+[Broadcom licence distributed by Debian](https://metadata.ftp-master.debian.org/changelogs/non-free/b/broadcom-sta/broadcom-sta_6.30.223.271-23_copyright)

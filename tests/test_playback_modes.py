@@ -11,6 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 from playback_modes import mode_commands
+from mpd_client import MPDClient
+from unittest.mock import Mock
 from shared import ApiError, mpd_quote
 
 
@@ -100,7 +102,8 @@ class PlaybackModesTest(unittest.TestCase):
                    "note_playback_activity": lambda: None, "log_playback": lambda *args, **kw: None,
                    "set_play_context": lambda **kw: None, "SYNC_QUEUE_HEAD": 0,
                    "lib_ui_context": types.SimpleNamespace(publish_playback=lambda *args, **kw: None),
-                   "_file_exists_in_library": lambda uri: True}
+                   "_file_exists_in_library": lambda uri: True,
+                   "pitunes_stream_url": lambda uri, port: f"http://127.0.0.1:{port}/api/stream?file={uri}"}
         class DeferredThread:
             def __init__(self, target, **kwargs):
                 self.target = target
@@ -145,12 +148,49 @@ class PlaybackModesTest(unittest.TestCase):
             load_functions("backend/playback.py", {"maybe_continue_next_album"}, context)
             self.assertFalse(context["maybe_continue_next_album"]())
 
+    def test_mpd_ack_does_not_replay_a_mutation(self):
+        client = MPDClient()
+        stream = Mock()
+        stream.readline.return_value = b"ACK [55@0] {next} Not playing\n"
+        client._get_socket = Mock(return_value=(None, stream))
+        with self.assertRaisesRegex(ApiError, "Not playing"):
+            client.command("next")
+        stream.write.assert_called_once_with(b"next\n")
+
+    def test_local_file_can_play_before_mpd_finishes_indexing(self):
+        mpd, _, context = self.queue_fixture()
+        original = mpd.command
+
+        def command(value):
+            if value == 'add "track.flac"':
+                raise ApiError(502, "ACK [50@0] {add} No such directory")
+            return original(value)
+
+        mpd.command = command
+        context["play_queue_fast"](target_uri="track.flac", queue=["track.flac"], album_id="1")
+        self.assertEqual(mpd.playing_file, "http://127.0.0.1:8080/api/stream?file=track.flac")
+
+    def test_stopped_next_uses_queue_position_and_preserves_audio_error(self):
+        mpd = FakeMPD()
+        mpd.queue = ["a.flac", "b.flac"]
+        context = {"mpd": mpd, "ApiError": ApiError, "_play_lock": threading.Lock(),
+                   "_continue_lock": threading.Lock(), "_play_context": {},
+                   "_mpd_append_pending": lambda: False}
+        load_functions("backend/playback.py", {"_status_int", "next_track_or_album"}, context)
+        mpd.status = {"state": "stop", "song": "0", "playlistlength": "2"}
+        context["next_track_or_album"]()
+        self.assertEqual(mpd.commands, ["play 1"])
+        mpd.status["error"] = "Failed to open ALSA output"
+        with self.assertRaisesRegex(ApiError, "Failed to open ALSA output"):
+            context["next_track_or_album"]()
+        self.assertEqual(mpd.commands, ["play 1"])
+
     def test_next_skips_tracks_then_advances_album_in_original_browse_order(self):
         mpd = FakeMPD()
         advanced = []
         order = {"albumBrowseSort": "year-desc", "mode": "album"}
         context = {
-            "mpd": mpd, "_play_lock": threading.Lock(), "_continue_lock": threading.Lock(),
+            "mpd": mpd, "ApiError": ApiError, "_play_lock": threading.Lock(), "_continue_lock": threading.Lock(),
             "_play_context": {"continuous": True, "album_id": "7", "browse_context": order},
             "_mpd_append_pending": lambda: False,
             "next_album_id_after": lambda current, browse: "8" if current == "7" and browse == order else "",

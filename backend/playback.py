@@ -126,11 +126,10 @@ def mpd_add_uri(uri: str, *, listen_port: int = 8080, position: int | None = Non
         mpd.command(command)
         return uri
 
-    candidates: list[str] = []
+    candidates = [uri]
+    # A newly mounted library can exist on disk while MPD's database is
+    # still indexing it. Stream the same local file if MPD cannot add its URI.
     if _file_exists_in_library(uri):
-        candidates.append(uri)
-    else:
-        candidates.append(uri)
         candidates.append(pitunes_stream_url(uri, listen_port))
 
     last_error = None
@@ -287,17 +286,17 @@ def play_queue_fast(
         if row:
             resolved_album_id = str(int(row["album_id"]))
 
+    set_play_context(continuous=False)
+    _cancel_mpd_append_queue()
+    mpd.command("clear")
+    mpd_add_uri(forward[0], listen_port=listen_port)
+    mpd.command("play 0")
     set_play_context(
         continuous=bool(continuous) and bool(resolved_album_id),
         album_id=resolved_album_id,
         entry_id=str(entry_id or resolved_album_id),
         browse_context=browse_context,
     )
-
-    _cancel_mpd_append_queue()
-    mpd.command("clear")
-    mpd_add_uri(forward[0], listen_port=listen_port)
-    mpd.command("play 0")
 
     remaining = forward[1:]
     sync_batch = remaining[:SYNC_QUEUE_HEAD]
@@ -395,7 +394,13 @@ def next_track_or_album(*, listen_port: int = 8080) -> None:
         appending = _mpd_append_pending()
         status = mpd.single_map("status")
         length = _status_int(status, "playlistlength")
-        at_end = length > 0 and _status_int(status, "song", -1) == length - 1
+        position = _status_int(status, "song", -1)
+        stopped = status.get("state") == "stop"
+        if stopped and status.get("error"):
+            raise ApiError(409, status["error"])
+        if length <= 0:
+            raise ApiError(409, "The playback queue is empty. Choose a song or album to play.")
+        at_end = position == length - 1
         if album_id and at_end and status.get("repeat") != "1" and status.get("random") != "1":
             if appending:
                 return  # The in-progress append has not exposed the next song yet.
@@ -403,7 +408,15 @@ def next_track_or_album(*, listen_port: int = 8080) -> None:
             if next_album and not append_album_and_play(next_album, listen_port=listen_port, browse_context=browse_context):
                 raise ApiError(502, "The next album has no playable tracks")
             return
-        mpd.command("next")
+        if stopped:
+            next_position = position + 1
+            if next_position >= length:
+                if status.get("repeat") != "1":
+                    return
+                next_position = 0
+            mpd.command(f"play {next_position}")
+        else:
+            mpd.command("next")
 
 
 def maybe_continue_next_album(*, listen_port: int = 8080) -> bool:
@@ -427,7 +440,7 @@ def maybe_continue_next_album(*, listen_port: int = 8080) -> bool:
         if status.get("repeat") == "1" or status.get("random") == "1":
             return False
         state = str(status.get("state") or "stop").lower()
-        if state not in ("stop", "ended"):
+        if state not in ("stop", "ended") or status.get("error"):
             return False
 
         playlist_length = _status_int(status, "playlistlength")

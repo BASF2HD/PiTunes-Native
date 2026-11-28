@@ -33,7 +33,7 @@ struct PlayerState {
     QString source, state, repeatMode;
     Track track;
     double elapsed = 0, duration = 0;
-    int volume = -1;
+    int volume = -1, queueLength = 0;
     bool shuffle = false;
     static PlayerState fromJson(const QJsonObject &object);
 };

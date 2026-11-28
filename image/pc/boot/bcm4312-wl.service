@@ -1,0 +1,13 @@
+[Unit]
+Description=Prefer locally installed Broadcom STA for BCM4312 LP-PHY
+After=systemd-udev-trigger.service systemd-modules-load.service
+Before=NetworkManager.service
+ConditionPathExists=/etc/pitunes-pc-image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/pitunes-pc/bcm4312-wl
+TimeoutStartSec=8
+
+[Install]
+WantedBy=NetworkManager.service

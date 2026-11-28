@@ -22,6 +22,7 @@ class MPDClient:
         fh = sock.makefile("rwb", buffering=0)
         greeting = fh.readline().decode("utf-8", errors="replace").strip()
         if not greeting.startswith("OK MPD"):
+            fh.close()
             sock.close()
             raise ApiError(502, "MPD did not return a valid greeting")
         self._local.sock = sock
@@ -29,36 +30,39 @@ class MPDClient:
         return sock, fh
 
     def _reset(self):
-        sock = getattr(self._local, "sock", None)
-        if sock is not None:
-            try:
-                sock.close()
-            except Exception:
-                pass
+        for stream in (getattr(self._local, "fh", None), getattr(self._local, "sock", None)):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
         self._local.sock = None
         self._local.fh = None
 
     def command(self, command):
-        last_error = None
-        for attempt in range(2):
-            try:
-                _sock, fh = self._get_socket()
-                fh.write((command + "\n").encode("utf-8"))
-                lines = []
-                while True:
-                    raw = fh.readline()
-                    if not raw:
-                        raise ApiError(502, "MPD connection closed unexpectedly")
-                    line = raw.decode("utf-8", errors="replace").rstrip("\n")
-                    if line.startswith("ACK"):
-                        raise ApiError(502, line)
-                    lines.append(line)
-                    if line == "OK":
-                        return lines
-            except (OSError, ApiError) as exc:
-                last_error = exc
-                self._reset()
-        raise last_error if isinstance(last_error, ApiError) else ApiError(502, str(last_error))
+        try:
+            _sock, fh = self._get_socket()
+        except OSError as exc:
+            self._reset()
+            raise ApiError(502, str(exc)) from exc
+        try:
+            fh.write((command + "\n").encode("utf-8"))
+            lines = []
+            while True:
+                raw = fh.readline()
+                if not raw:
+                    raise ApiError(502, "MPD connection closed unexpectedly")
+                line = raw.decode("utf-8", errors="replace").rstrip("\n")
+                if line.startswith("ACK"):
+                    raise ApiError(502, line)
+                lines.append(line)
+                if line == "OK":
+                    return lines
+        except (OSError, ApiError) as exc:
+            self._reset()
+            if isinstance(exc, ApiError):
+                raise
+            raise ApiError(502, str(exc)) from exc
 
     def entries(self, command):
         return parse_mpd_lines(self.command(command))

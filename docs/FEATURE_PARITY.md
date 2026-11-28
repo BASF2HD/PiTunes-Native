@@ -57,7 +57,7 @@ RAM. None of these can be established by mock API responses alone.
   plus Compact and Detailed performance readings and CSV capture.
 - PC Audio settings now consume detected ALSA PCMs and list reported mixer
   controls. Raspberry Pi route and DAC HAT support remain in the backend.
-  Physical PC speaker, jack, HDMI and USB playback require verification.
+  Speaker, Headphone, and Auto-Mute controls appear where ALSA reports them. Automatic prefers a built-in analogue PCM. Physical speaker, jack, HDMI and USB playback require verification.
 - PC input enables libinput tapping where supported. Trackpad list arbitration
   and gesture-axis handling are covered by native code and require hardware
   regression testing. Wi-Fi diagnostics and boot USB export are implemented.

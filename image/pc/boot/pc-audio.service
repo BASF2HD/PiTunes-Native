@@ -1,0 +1,14 @@
+[Unit]
+Description=Resolve the automatic PiTunes PC ALSA playback device
+After=systemd-modules-load.service systemd-udev-trigger.service alsa-restore.service
+Before=mpd.service
+ConditionPathExists=/etc/pitunes-pc-image
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/bin/udevadm settle --timeout=2 --exit-if-exists=/proc/asound/pcm
+ExecStart=/usr/bin/python3 /opt/pitunes/backend/pc_audio_boot.py
+TimeoutStartSec=5
+
+[Install]
+WantedBy=mpd.service

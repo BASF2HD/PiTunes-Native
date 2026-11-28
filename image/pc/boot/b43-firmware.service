@@ -1,0 +1,13 @@
+[Unit]
+Description=Install owner-supplied b43 firmware from the boot USB
+RequiresMountsFor=/boot/efi
+ConditionPathExists=/boot/efi/INSTALL-B43/ucode15.fw
+After=systemd-modules-load.service systemd-udev-trigger.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/pitunes-pc/hardware-report --install-b43
+TimeoutStartSec=20
+
+[Install]
+WantedBy=multi-user.target

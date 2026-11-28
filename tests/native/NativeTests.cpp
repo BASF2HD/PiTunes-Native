@@ -1031,10 +1031,11 @@ private slots:
     }
     void lightweightModePaintsAndMonitorStopsWhenOff() {
         HttpFixture server;
-        MainWindow window(server.url(), true, false, true);
+        MainWindow window(server.url(), true);
         window.show();
         auto *flow = window.coverFlow();
-        QCOMPARE(flow->animationMode(), AnimationMode::Lightweight);
+        QCOMPARE(flow->animationMode(), AnimationMode::Full);
+        flow->setAnimationMode(AnimationMode::Lightweight);
         auto *monitor = window.findChild<PerformanceMonitor *>();
         QVERIFY(monitor);
         QCOMPARE(monitor->mode(), MonitorMode::Off);

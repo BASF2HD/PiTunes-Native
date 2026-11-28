@@ -12,6 +12,10 @@ namespace PiTunes {
 namespace {
 void drawProjected(QPainter &painter, const QImage &image, const QPolygonF &quad) {
     if (image.isNull()) return;
+    if (quad[0].y() == quad[1].y() && quad[3].y() == quad[2].y()) {
+        painter.drawImage(QRectF(quad[0], quad[2]), image);
+        return;
+    }
     const QPolygonF source({QPointF(0, 0), QPointF(image.width(), 0),
         QPointF(image.width(), image.height()), QPointF(0, image.height())});
     QTransform projection;
@@ -27,6 +31,7 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     : QWidget(parent), m_model(model), m_artwork(artwork) {
     m_startupClock.start();
     setFocusPolicy(Qt::StrongFocus); setAttribute(Qt::WA_AcceptTouchEvents);
+    setAttribute(Qt::WA_OpaquePaintEvent);
     setMinimumSize(240, 150); setAccessibleName("Album CoverFlow");
     updateCaptionLayout();
     m_timer.setTimerType(Qt::PreciseTimer);
@@ -183,11 +188,9 @@ void CoverFlowWidget::setReducedMotion(bool reduced) {
 }
 void CoverFlowWidget::setAnimationMode(AnimationMode mode) {
     m_animationMode = mode;
-#ifdef Q_OS_MACOS
-    m_timer.setInterval(mode == AnimationMode::Lightweight ? 33 : 16);
-#else
-    m_timer.setInterval(mode == AnimationMode::Lightweight ? 40 : 33);
-#endif
+    setFrameRate(m_frameRate);
+    m_motionScale = 1.;
+    m_fastFrames = 0;
     if (reducedMotion() && m_timer.isActive()) {
         settle();
         update();
@@ -198,6 +201,11 @@ void CoverFlowWidget::setAnimationMode(AnimationMode mode) {
         emit artworkBackdropChanged();
     }
 }
+void CoverFlowWidget::setFrameRate(int framesPerSecond) {
+    m_frameRate = framesPerSecond == 15 || framesPerSecond == 20 ? framesPerSecond : 30;
+    m_timer.setInterval(qCeil(1000. / m_frameRate));
+}
+
 void CoverFlowWidget::setFrameSampling(bool enabled) {
     m_sampleFrames = enabled;
     m_frames = {};
@@ -287,7 +295,7 @@ void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
 void CoverFlowWidget::paintEvent(QPaintEvent *) {
     ++m_paints;
     QElapsedTimer drawTime;
-    if (m_sampleFrames && m_timer.isActive()) drawTime.start();
+    if (m_timer.isActive()) drawTime.start();
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -300,20 +308,23 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
     }
     const double size = coverSize();
     const double top = coverTop();
-    // The artwork cache already holds thumbnails. On HiDPI displays, do the
-    // expensive projective passes at logical resolution during movement. Draw
-    // the caption and the final resting frame at the display pixel ratio.
+    // Pixel work, independent of the number of covers and their projections.
+    // Keep the full scene and composite it at a lower sampling density only
+    // when movement exceeds the paint budget. Static frames stay native-size.
     const int sceneHeight = qMin(height(), qCeil(top + size * 1.55) + 2);
-    if (m_timer.isActive() && devicePixelRatioF() > 1. && qint64(width()) * sceneHeight <= 2000000) {
-        const QSize surfaceSize(width(), sceneHeight);
+    const QRect scene(0, 0, width(), sceneHeight);
+    const double scale = qMin(m_motionScale, std::sqrt(2000000. / qMax(1., double(width()) * sceneHeight)));
+    if (drawTime.isValid() && (scale < .99 || devicePixelRatioF() > 1.)) {
+        const QSize surfaceSize(qMax(1, qCeil(width() * scale)), qMax(1, qCeil(sceneHeight * scale)));
         if (m_motionSurface.size() != surfaceSize) m_motionSurface = QImage(surfaceSize, QImage::Format_RGB32);
         if (!m_motionSurface.isNull()) {
             m_motionSurface.fill(Qt::black);
             {
                 QPainter covers(&m_motionSurface);
+                covers.scale(double(surfaceSize.width()) / width(), double(surfaceSize.height()) / sceneHeight);
                 paintCovers(covers, size, top, &m_hits);
             }
-            painter.drawImage(QPoint(), m_motionSurface);
+            painter.drawImage(scene, m_motionSurface);
         } else paintCovers(painter, size, top, &m_hits);
     } else {
         m_motionSurface = QImage();
@@ -350,9 +361,21 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
     painter.end();
     if (drawTime.isValid()) {
         const auto ns = drawTime.nsecsElapsed();
-        ++m_frames.count;
-        m_frames.totalNs += ns;
-        m_frames.peakNs = qMax(m_frames.peakNs, ns);
+        if (m_sampleFrames) {
+            ++m_frames.count;
+            m_frames.totalNs += ns;
+            m_frames.peakNs = qMax(m_frames.peakNs, ns);
+        }
+        // Hysteresis avoids sharpening and softening on successive frames.
+        if (ns > 28'000'000 && m_motionScale > .45) {
+            m_motionScale = qMax(.45, m_motionScale * (ns > 65'000'000 ? .68 : .82));
+            m_fastFrames = 0;
+        } else if (ns < 10'000'000 && m_motionScale < 1.) {
+            if (++m_fastFrames == 12) {
+                m_motionScale = qMin(1., m_motionScale * 1.10);
+                m_fastFrames = 0;
+            }
+        } else m_fastFrames = 0;
     }
 }
 void CoverFlowWidget::paintArtworkBackdrop(QPainter &painter) const {
@@ -409,9 +432,10 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
     painter.setPen(Qt::NoPen);
     painter.setBrush(Qt::black);
     for (const auto &card : cards) {
-        painter.drawPolygon(card.quads.reflection);
-        if (card.art && (!lightMotion || std::abs(card.row - m_visualPosition) < 1.6))
-            drawProjected(painter, card.art->reflection, card.quads.reflection);
+        const bool drawArt = card.art && !card.art->reflection.isNull() &&
+            (!lightMotion || std::abs(card.row - m_visualPosition) < 1.6);
+        if (!drawArt || card.art->reflection.hasAlphaChannel()) painter.drawPolygon(card.quads.reflection);
+        if (drawArt) drawProjected(painter, card.art->reflection, card.quads.reflection);
     }
     for (const auto &card : cards) {
         const auto &album = *m_model->album(card.row);

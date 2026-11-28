@@ -26,3 +26,28 @@ enumeration with an internal Windows disk present, graphics fallback, awake
 display while paused, actual touch/keyboard, USB DAC reboot ordering, Pi HAT round
 trips, network recovery/receivers and long playback under scan load. Never modify
 the owner's internal disk to diagnose this project.
+
+## Owner-confirmed Atom N280 reference unit
+
+Booted `antiX-26.1_386-full.iso` on the physical PC. The owner reports an
+Intel Atom N280 (i686, one core with Hyper-Threading), 1 GB RAM (987.7 MiB
+usable), and 1024×600 at 60 Hz. The Intel 945GSE/GMA 950 used kernel `i915` and
+Xorg `intel`, with llvmpipe for OpenGL. antiX used kernel
+`5.10.256-antix.1-486-smp`, 292.1 MiB RAM and 155 processes in the observed
+session. The owner also reports roughly 300 MB for Windows 7 on the same PC.
+
+| Hardware | Observed driver and details |
+|---|---|
+| Intel NM10/ICH7 HDA | `snd_hda_intel`, Realtek ALC272. ALSA card `Intel`, device 0, one shared analogue PCM for speakers and headphone jack. `plughw:CARD=Intel,DEV=0` retains the card identifier. |
+| Analogue mixer | Master at 41%, Speaker and Headphone at 100%, all unmuted in antiX. Auto-Mute enabled. These are observations, not levels to initialise. |
+| BCM4312 b/g LP-PHY | Broadcom STA `wl` was working in antiX. Compare the PCI ID reported by PiTunes before selecting an offline driver. |
+| Realtek RTL810xE Ethernet | `r8169` in antiX. |
+
+antiX uses a small window manager and a different init/service stack. Native
+PiTunes uses Openbox without a compositor and retains Debian 12/systemd for
+its service dependencies. Measure steady, equivalent workloads before drawing
+a conclusion from the two desktop memory snapshots. `llvmpipe` is relevant
+to the original WebGL runtime. QPainter still rasterizes covers on the CPU,
+while the Xorg DDX handles screen copies and presentation.
+[antiX architecture](https://antixlinux.com/about/)
+[X.Org Intel acceleration matrix](https://www.x.org/IntelGraphicsDriver/)

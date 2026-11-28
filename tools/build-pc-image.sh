@@ -29,7 +29,7 @@ case "${ARCH}" in
     EFI_TARGET=i386-efi
     EFI_PACKAGE=grub-efi-ia32-bin
     EFI_FILE=BOOTIA32.EFI
-    PC_FIRMWARE=(firmware-misc-nonfree)
+    PC_FIRMWARE=(firmware-misc-nonfree xserver-xorg-video-intel)
     ;;
   *) echo "Unsupported PC architecture: ${ARCH}" >&2; exit 2 ;;
 esac

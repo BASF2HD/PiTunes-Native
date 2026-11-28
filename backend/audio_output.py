@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
+import math
 import os
 import re
 import subprocess
+import wave
+from array import array
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +89,34 @@ def _run_aplay_list() -> str:
     return proc.stdout or ""
 
 
+def _proc_pcm_devices(root: Path = Path("/proc/asound")) -> list[dict[str, Any]]:
+    """Read playback PCMs exposed by the kernel even if aplay cannot open ctl."""
+    try:
+        pcm_lines = (root / "pcm").read_text().splitlines()
+    except OSError:
+        return []
+    try:
+        cards = dict(re.findall(r"(?m)^\s*(\d+)\s+\[[^\]]+\]:\s*[^\n]*? - (.+)$",
+                                (root / "cards").read_text()))
+    except OSError:
+        cards = {}
+    result = []
+    for line in pcm_lines:
+        match = re.match(r"^(\d+)-(\d+):\s*([^:]+):.+:\s*playback\s+[1-9]", line)
+        if not match:
+            continue
+        card, device, name = match.groups()
+        number = int(card)
+        try:
+            short = (root / f"card{number}" / "id").read_text().strip()
+        except OSError:
+            short = ""
+        result.append({"card": number, "device": int(device), "short_name": short,
+                       "card_id": cards.get(str(number), short or f"Card {number}"),
+                       "device_desc": name.strip()})
+    return result
+
+
 def list_alsa_devices(*, pc: bool = False) -> list[dict[str, Any]]:
     output = _run_aplay_list()
     devices: list[dict[str, Any]] = []
@@ -106,10 +138,13 @@ def list_alsa_devices(*, pc: bool = False) -> list[dict[str, Any]]:
                 "short_name": (short_name or "").strip(),
                 "card_id": (card_id or "").strip(),
                 "device_desc": (device_desc or "").strip(),
-                **({"alsa": f"plughw:CARD={short_name},DEV={device}", "card_name": short_name}
-                   if pc and re.fullmatch(r"[A-Za-z0-9_]+", short_name) else {}),
             }
         )
+    if pc:
+        reported = {(d["card"], d["device"]) for d in devices}
+        for entry in _proc_pcm_devices():
+            if (entry["card"], entry["device"]) not in reported:
+                devices.append(entry)
     multi_card = len(devices) > 1
     mixers = {}
     for entry in devices:
@@ -117,7 +152,16 @@ def list_alsa_devices(*, pc: bool = False) -> list[dict[str, Any]]:
         card_name = entry.pop("card_id") or short
         pcm_name = entry.pop("device_desc")
         if pc:
+            if re.fullmatch(r"[A-Za-z0-9_]+", short):
+                entry["alsa"] = f"plughw:CARD={short},DEV={entry['device']}"
+            else:
+                entry["alsa"] = f"plughw:{entry['card']},{entry['device']}"
             entry["label"] = f"{card_name} · {_clean_device_name(pcm_name)}"
+            entry["kind"] = "hdmi" if "hdmi" in pcm_name.lower() else "usb" if "usb" in (card_name + pcm_name).lower() else "analog" if "analog" in pcm_name.lower() else "other"
+            if entry["kind"] == "analog":
+                codec = _analogue_codec(entry["card"], pcm_name)
+                entry["codec"] = codec
+                entry["label"] = f"Built-in Audio ({codec})" if codec else f"Built-in Audio ({_clean_device_name(pcm_name)})"
             if entry["card"] not in mixers:
                 mixers[entry["card"]] = list_mixer_controls(entry["card"])
             entry["controls"] = mixers[entry["card"]]
@@ -126,6 +170,19 @@ def list_alsa_devices(*, pc: bool = False) -> list[dict[str, Any]]:
     if not devices and not pc:
         devices.append({"alsa": "default", "label": "default - ALSA default output", "card": -1, "device": 0})
     return devices
+
+
+def _analogue_codec(card: int, pcm_name: str) -> str:
+    codecs = []
+    for codec in sorted(Path(f"/proc/asound/card{card}").glob("codec#*")):
+        try:
+            with codec.open() as stream:
+                heading = stream.readline(160).strip()
+        except OSError:
+            continue
+        if heading.startswith("Codec: ") and "HDMI" not in heading.upper():
+            codecs.append(heading.removeprefix("Codec: "))
+    return next((c for c in codecs if c.split()[-1] in pcm_name), codecs[0] if codecs else "")
 
 
 def list_mixer_controls(card: int) -> list[dict[str, Any]]:
@@ -159,7 +216,9 @@ def parse_mixer_controls(output: str) -> list[dict[str, Any]]:
             enum = re.search(r"(?m)^\s*Item0: '([^']+)'", body)
             state = ("/".join(dict.fromkeys(values)) if values else
                      enum[1] if enum and enum[1] in ("Enabled", "Disabled") else "")
-            controls.append({"name": label, "volume": volume, "port": port, "state": state})
+            percentages = re.findall(r"(?m)^.+Playback[^\n]*?\[(\d+)%\]", body)
+            controls.append({"name": label, "volume": volume, "port": port, "state": state,
+                             "percent": int(percentages[0]) if percentages else None})
     return controls
 
 
@@ -215,6 +274,74 @@ def audio_devices_payload(settings: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
+
+
+def _selected_pc_device(alsa: str) -> dict[str, Any]:
+    if not PC_IMAGE.is_file():
+        raise ValueError("This control is available on PC images.")
+    device = next((entry for entry in list_alsa_devices(pc=True) if entry["alsa"] == alsa), None)
+    if not device:
+        raise ValueError("Select a detected audio device first.")
+    return device
+
+
+def apply_pc_mixer(body: dict[str, Any]) -> dict[str, Any]:
+    device = _selected_pc_device(body.get("alsa"))
+    name = body.get("control")
+    control = next((c for c in device["controls"] if c["name"] == name), None)
+    if device.get("kind") != "analog" or not control:
+        raise ValueError("The selected analogue output does not expose that control.")
+    args = []
+    if name == "Auto-Mute Mode" and control["state"] in ("Enabled", "Disabled"):
+        action = body.get("state")
+        if action in ("Enabled", "Disabled"):
+            args.append(action)
+    elif control["port"]:
+        if "percent" in body:
+            percent = body["percent"]
+            if type(percent) is not int or not control["volume"] or not 0 <= percent <= 100:
+                raise ValueError("Volume must be a supported percent from 0 to 100.")
+            args.append(f"{percent}%")
+        action = body.get("state")
+        if action in ("mute", "unmute"):
+            args.append(action)
+    if not args:
+        raise ValueError("Select a supported speaker, headphone or auto-mute setting.")
+    _run_pc_audio(["amixer", "-q", "-c", str(device["card"]), "sset", name, *args])
+    return {"ok": True, "message": f"{name} updated."}
+
+
+def _test_clip() -> bytes:
+    rate = 48000
+    frames = rate // 2
+    samples = array("h")
+    for i in range(frames):
+        ramp = min(1., i / 800., (frames - 1 - i) / 800.)
+        value = round(819 * ramp * math.sin(2 * math.pi * 650 * i / rate))
+        samples.extend((value, value))
+    if os.sys.byteorder != "little":
+        samples.byteswap()
+    output = io.BytesIO()
+    with wave.open(output, "wb") as tone:
+        tone.setparams((2, 2, rate, frames, "NONE", "not compressed"))
+        tone.writeframes(samples.tobytes())
+    return output.getvalue()
+
+
+def _run_pc_audio(command: list[str], data: bytes | None = None) -> None:
+    try:
+        result = subprocess.run(command, input=data, capture_output=True, timeout=4, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Audio device could not be opened: {exc}") from exc
+    if result.returncode:
+        raise RuntimeError(result.stderr.decode(errors="replace").strip() or "The ALSA operation failed.")
+
+
+def test_pc_audio(body: dict[str, Any]) -> dict[str, Any]:
+    alsa = body.get("alsa")
+    _selected_pc_device(alsa)
+    _run_pc_audio(["aplay", "-q", "-D", alsa], _test_clip())
+    return {"ok": True, "message": "Test tone sent to the selected output."}
 
 
 def apply_audio_output(settings: dict[str, Any], body: dict[str, Any] | None = None) -> dict[str, Any]:

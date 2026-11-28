@@ -98,7 +98,7 @@ def verify_detected_audio_route(guest):
     audio = guest.api("audio/devices")
     if audio.get("platform") != "pc":
         return False
-    analog = next(d for d in audio["devices"] if "analog" in d["label"].lower())
+    analog = next(d for d in audio["devices"] if d.get("kind") == "analog" or "analog" in d["label"].lower())
     assert analog["alsa"].startswith("plughw:CARD="), analog
     applied = guest.api("audio/output", {"output": "pc-alsa", "alsa": analog["alsa"], "mixer": "software"}, timeout=40)
     assert applied.get("ok") is True, applied

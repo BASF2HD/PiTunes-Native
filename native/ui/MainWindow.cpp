@@ -122,19 +122,20 @@ private:
 };
 }
 
-MainWindow::MainWindow(QUrl api, bool demo, bool reduced, bool lightweight) : m_demo(demo) {
+MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_forceReducedMotion = reduced;
     setWindowTitle("PiTunes Native"); setWindowIcon(QIcon(":/brand/icon.png")); resize(1100, 720);
     m_api = new ApiClient(std::move(api), this);
     m_library = new LibraryModel(m_api, this);
     QSettings preferences;
     const int defaultMode = preferences.value("native/reducedMotion", false).toBool()
-        ? int(AnimationMode::Off) : int(lightweight ? AnimationMode::Lightweight : AnimationMode::Full);
+        ? int(AnimationMode::Off) : int(AnimationMode::Full);
     const auto mode = reduced ? AnimationMode::Off
         : AnimationMode(qBound(0, preferences.value("native/animationMode", defaultMode).toInt(), 2));
     m_artwork = new ArtworkCache(m_api, mode == AnimationMode::Full ? 12 : 6, this);
     m_flow = new CoverFlowWidget(m_library, m_artwork, this);
     m_flow->setAnimationMode(mode);
+    m_flow->setFrameRate(preferences.value("native/animationFrameRate", 30).toInt());
     m_monitor = new PerformanceMonitor(m_flow, this);
     m_flow->installEventFilter(this);
     const CaptionFontSizes defaults;
@@ -327,13 +328,17 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced, bool lightweight) : m_
     m_play->setIconSize(QSize(22, 22));
     m_play->setProperty("playing", false);
     connect(m_play, &QToolButton::clicked, this, [this] {
-        if (m_player.track.file.isEmpty()) showAlbum(m_flow->currentIndex(), true);
+        if (m_player.track.file.isEmpty() && m_player.queueLength == 0) showAlbum(m_flow->currentIndex(), true);
         else command(m_player.state == "play" ? "/api/player/pause" : "/api/player/play");
     });
     transport->addWidget(m_play);
     auto *next = iconButton(PlayerIcon::Next, "Next song", 32);
     next->setObjectName("trackStep");
-    connect(next, &QToolButton::clicked, this, [this] { command("/api/player/next"); });
+    connect(next, &QToolButton::clicked, this, [this] {
+        if (m_player.state == "stop" && m_player.queueLength == 0 && m_player.track.file.isEmpty())
+            showAlbum(m_flow->currentIndex(), true);
+        else command("/api/player/next");
+    });
     transport->addWidget(next);
 
     auto *albumRail = new QFrame(m_transportPanel);
@@ -617,7 +622,11 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root) {
     auto *settings = tab(PlayerIcon::Settings, "Settings");
     action(settings, PlayerIcon::Settings, "Application settings", [this] {
         auto *dialog = new SettingsDialog(m_demo ? nullptr : m_api, m_flow->captionFontSizes(),
-                                          this, m_flow->animationMode(), m_monitor, m_forceReducedMotion);
+                                          this, m_flow->animationMode(), m_monitor, m_forceReducedMotion, m_flow->frameRate());
+        connect(dialog, &SettingsDialog::animationFrameRateChanged, this, [this](int fps) {
+            m_flow->setFrameRate(fps);
+            QSettings().setValue("native/animationFrameRate", m_flow->frameRate());
+        });
         connect(dialog, &SettingsDialog::animationModeChanged, this, &MainWindow::applyAnimationMode);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         connect(dialog, &SettingsDialog::captionFontSizesChanged, this, [this](CaptionFontSizes sizes) {
@@ -798,9 +807,17 @@ void MainWindow::sendNextCommand() {
     if (m_commandPending || m_commands.isEmpty()) return;
     m_commandPending = true;
     const auto intent = m_commands.dequeue();
-    m_api->post(intent.path, intent.body, [this](QJsonObject, QString error) {
+    m_api->post(intent.path, intent.body, [this, path = intent.path](QJsonObject, QString error) {
         m_commandPending = false;
-        if (!error.isEmpty()) setMessage(error);
+        if (!error.isEmpty()) {
+            setMessage(error);
+            // Repeated presses queued behind a failed playback attempt must not
+            // obscure the original device or file error with a second failure.
+            if (path == "/api/player/play" || path == "/api/player/next") {
+                for (int i = m_commands.size() - 1; i >= 0; --i)
+                    if (m_commands.at(i).path == "/api/player/next") m_commands.removeAt(i);
+            }
+        }
         if (m_commands.isEmpty()) refreshPlayer(); else sendNextCommand();
     });
 }
