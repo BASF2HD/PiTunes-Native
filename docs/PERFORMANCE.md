@@ -58,3 +58,37 @@ difference over the sample window provides an average; `top -b -d 1 -n 61`
 can supply per-process samples with the first reading excluded. A 1 GiB native
 image smoke test can establish boot and playback under a memory cap. Real Atom
 and Zero 2 W RAM, latency and CPU results require measurements on those devices.
+
+## Built-in System Performance Monitor
+
+**Settings → System → Performance Monitor** selects Off, Compact overlay or
+Detailed monitor. **F12** toggles the compact overlay on or turns the monitor
+off. Off is the startup default. The opaque text window updates once per second
+from Linux `/proc` and `/sys`. The monitor uses no background service or shell
+commands. A reading of n/a means the data was unavailable on this system.
+
+The monitor calculates RAM used as MemTotal minus MemAvailable. Process CPU
+uses each process's user and system ticks divided by the elapsed all-core system
+ticks. Disk throughput uses whole-device sector deltas (512-byte sectors), so
+disk activity includes the boot USB and other active physical drives. The
+hardware report lists USB link speeds. ZRAM shows original and resident memory,
+separately from total swap. The first cover metric is time from construction of
+CoverFlow to its first paint with centred decoded artwork, including API time.
+This is distinct from complete cold boot and excludes firmware time.
+
+Animation FPS counts completed CoverFlow paint events per second of actual
+transition time within the sample. This is widget rendering, independent of
+display refresh. Average and peak report measured QPainter work in animation
+frames. Idle reports zero FPS. Selecting Off stops the sampler and paint
+timing. The overlay has a separate backing surface from CoverFlow.
+
+**Record benchmark CSV…** captures up to 900 one-second samples and writes the
+file once when stopped, switched Off, or automatically filled. Put the CSV on
+a separate writable drive when benchmarking the boot USB. It records elapsed
+animation time, frame count, CPU, RAM, disk, swap activity and first cover delay.
+Keep the monitor Off and use the external sampler for monitor-overhead comparisons.
+Compare matching 60-second idle, playback and repeated CoverFlow scenarios
+with the monitor Off, Compact and Detailed, recording total CPU and the Qt
+process RSS independently. Repeat in reversed order on each physical machine.
+The requested less-than-2 MiB RSS and less-than-1 percentage point total CPU
+targets still require physical measurements.

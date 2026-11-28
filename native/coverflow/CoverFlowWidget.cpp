@@ -25,15 +25,12 @@ void drawProjected(QPainter &painter, const QImage &image, const QPolygonF &quad
 
 CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWidget *parent)
     : QWidget(parent), m_model(model), m_artwork(artwork) {
+    m_startupClock.start();
     setFocusPolicy(Qt::StrongFocus); setAttribute(Qt::WA_AcceptTouchEvents);
     setMinimumSize(240, 150); setAccessibleName("Album CoverFlow");
     updateCaptionLayout();
     m_timer.setTimerType(Qt::PreciseTimer);
-#ifdef Q_OS_MACOS
-    m_timer.setInterval(16);
-#else
-    m_timer.setInterval(33);
-#endif
+    setAnimationMode(AnimationMode::Full);
     connect(&m_timer, &QTimer::timeout, this, [this] {
         sampleMotion();
         if (qRound(m_visualPosition) != m_captionRow) {
@@ -48,11 +45,12 @@ CoverFlowWidget::CoverFlowWidget(LibraryModel *model, ArtworkCache *artwork, QWi
     });
     m_wheelIdle.setSingleShot(true);
     m_wheelIdle.setInterval(140);
-    connect(&m_wheelIdle, &QTimer::timeout, this, [this] { m_wheelRemainder = 0.; });
+    connect(&m_wheelIdle, &QTimer::timeout, this, [this] { m_wheelRemainder = 0.; m_wheelAxis = 0; });
     connect(model, &QAbstractItemModel::modelReset, this, [this] {
         m_wheelIdle.stop();
         m_target = 0;
         m_wheelRemainder = 0.;
+        m_wheelAxis = 0;
         settle();
         update();
     });
@@ -124,13 +122,14 @@ QPair<int, int> CoverFlowWidget::visibleRows(double position) const {
     const double halfViewport = width() / (2. * coverSize());
     const double screenReach = coverReach(halfViewport);
     const int cacheReach = (m_artwork->prefetchCapacity() - 1) / 2;
-    const double reach = qMin(screenReach, double(cacheReach));
+    const int modeReach = m_animationMode == AnimationMode::Lightweight ? qMin(3, cacheReach) : cacheReach;
+    const double reach = qMin(screenReach, double(modeReach));
     return {qMax(0, int(std::ceil(position - reach))),
             qMin(m_model->rowCount() - 1, int(std::floor(position + reach)))};
 }
 void CoverFlowWidget::select(int index, bool animate) {
     index = qBound(0, index, qMax(0, m_model->rowCount() - 1));
-    const bool moving = animate && !m_reduced && isVisible();
+    const bool moving = animate && !reducedMotion() && isVisible();
     if (index == m_target && (moving || !m_timer.isActive())) return;
     if (m_timer.isActive()) sampleMotion();
     const bool changed = m_target != index;
@@ -147,7 +146,10 @@ void CoverFlowWidget::select(int index, bool animate) {
         m_seconds = 0.;
         m_target = index;
         m_clock.restart();
-        if (!m_timer.isActive()) m_timer.start();
+        if (!m_timer.isActive()) {
+            m_timer.start();
+            if (m_sampleFrames) m_activeFrameWindow.start();
+        }
     } else {
         m_target = index;
         settle();
@@ -165,6 +167,10 @@ void CoverFlowWidget::sampleMotion() {
     m_visualPosition = m_startPosition + (m_target - m_startPosition) * coverMoveProgress(m_seconds);
 }
 void CoverFlowWidget::settle() {
+    if (m_activeFrameWindow.isValid()) {
+        m_frames.activeNs += m_activeFrameWindow.nsecsElapsed();
+        m_activeFrameWindow.invalidate();
+    }
     m_timer.stop();
     m_startPoses.clear();
     m_visualPosition = m_target;
@@ -173,12 +179,39 @@ void CoverFlowWidget::settle() {
     emit artworkBackdropChanged();
 }
 void CoverFlowWidget::setReducedMotion(bool reduced) {
-    m_reduced = reduced;
-    if (reduced && m_timer.isActive()) {
+    setAnimationMode(reduced ? AnimationMode::Off : AnimationMode::Full);
+}
+void CoverFlowWidget::setAnimationMode(AnimationMode mode) {
+    m_animationMode = mode;
+#ifdef Q_OS_MACOS
+    m_timer.setInterval(mode == AnimationMode::Lightweight ? 33 : 16);
+#else
+    m_timer.setInterval(mode == AnimationMode::Lightweight ? 40 : 33);
+#endif
+    if (reducedMotion() && m_timer.isActive()) {
         settle();
         update();
         emit navigationSettled();
+    } else {
+        prefetch();
+        update();
+        emit artworkBackdropChanged();
     }
+}
+void CoverFlowWidget::setFrameSampling(bool enabled) {
+    m_sampleFrames = enabled;
+    m_frames = {};
+    m_activeFrameWindow.invalidate();
+    if (enabled && animating()) m_activeFrameWindow.start();
+}
+FrameSample CoverFlowWidget::takeFrameSample() {
+    if (m_activeFrameWindow.isValid()) {
+        m_frames.activeNs += m_activeFrameWindow.nsecsElapsed();
+        m_activeFrameWindow.restart();
+    }
+    const auto sample = m_frames;
+    m_frames = {};
+    return sample;
 }
 void CoverFlowWidget::setPlayback(const PlayerState &state) {
     const bool active = (state.state == "play" || state.state == "pause") && !state.track.file.isEmpty();
@@ -253,6 +286,8 @@ void CoverFlowWidget::resizeEvent(QResizeEvent *event) {
 }
 void CoverFlowWidget::paintEvent(QPaintEvent *) {
     ++m_paints;
+    QElapsedTimer drawTime;
+    if (m_sampleFrames && m_timer.isActive()) drawTime.start();
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -284,6 +319,14 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         m_motionSurface = QImage();
         paintCovers(painter, size, top, &m_hits);
     }
+    if (m_firstCoverPaintMs < 0) {
+        const int centre = qRound(m_visualPosition);
+        const auto *album = m_model->album(centre);
+        const auto *art = album ? m_artwork->find(album->artUrl) : nullptr;
+        if (art && !art->cover.isNull() &&
+            std::any_of(m_hits.cbegin(), m_hits.cend(), [centre](const auto &hit) { return hit.first == centre; }))
+            m_firstCoverPaintMs = m_startupClock.elapsed();
+    }
     const auto &caption = m_caption;
     const auto textArea = captionRect();
     painter.setClipRect(textArea);
@@ -304,6 +347,13 @@ void CoverFlowWidget::paintEvent(QPaintEvent *) {
         painter.drawText(line, Qt::AlignCenter, text);
         lineTop += lineHeight;
     }
+    painter.end();
+    if (drawTime.isValid()) {
+        const auto ns = drawTime.nsecsElapsed();
+        ++m_frames.count;
+        m_frames.totalNs += ns;
+        m_frames.peakNs = qMax(m_frames.peakNs, ns);
+    }
 }
 void CoverFlowWidget::paintArtworkBackdrop(QPainter &painter) const {
     if (m_model->rowCount() == 0) return;
@@ -315,7 +365,8 @@ void CoverFlowWidget::paintArtworkBackdrop(QPainter &painter) const {
 void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
                                   QVector<QPair<int, QPolygonF>> *hits) const {
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    const bool lightMotion = m_timer.isActive() && m_animationMode == AnimationMode::Lightweight;
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, !lightMotion);
     if (hits) hits->clear();
     const auto [first, last] = visibleRows(m_visualPosition);
     const QPointF origin(width() / 2., top);
@@ -331,13 +382,20 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
         if (!album) return;
         const auto pose = poseAt(row);
         auto quads = projectCover(pose, size, origin);
+        if (lightMotion) {
+            // Shorten the reflection while moving, keeping its projected floor edge.
+            quads.reflection[2] = quads.reflection[1] + .45 * (quads.reflection[2] - quads.reflection[1]);
+            quads.reflection[3] = quads.reflection[0] + .45 * (quads.reflection[3] - quads.reflection[0]);
+        }
         if (!quads.face.boundingRect().intersects(QRectF(rect())) &&
             !quads.reflection.boundingRect().intersects(QRectF(rect()))) return;
         cards.append({row, std::move(quads), m_artwork->find(album->artUrl)});
     };
     for (int row = first; row <= last; ++row) addCard(row);
-    for (auto it = m_startPoses.cbegin(); it != m_startPoses.cend(); ++it) {
-        if (it.key() < first || it.key() > last) addCard(it.key());
+    if (!lightMotion) {
+        for (auto it = m_startPoses.cbegin(); it != m_startPoses.cend(); ++it) {
+            if (it.key() < first || it.key() > last) addCard(it.key());
+        }
     }
     std::sort(cards.begin(), cards.end(), [this](const Card &a, const Card &b) {
         const auto distanceA = std::abs(a.row - m_visualPosition);
@@ -352,7 +410,8 @@ void CoverFlowWidget::paintCovers(QPainter &painter, double size, double top,
     painter.setBrush(Qt::black);
     for (const auto &card : cards) {
         painter.drawPolygon(card.quads.reflection);
-        if (card.art) drawProjected(painter, card.art->reflection, card.quads.reflection);
+        if (card.art && (!lightMotion || std::abs(card.row - m_visualPosition) < 1.6))
+            drawProjected(painter, card.art->reflection, card.quads.reflection);
     }
     for (const auto &card : cards) {
         const auto &album = *m_model->album(card.row);
@@ -378,10 +437,19 @@ void CoverFlowWidget::keyPressEvent(QKeyEvent *e) {
     else QWidget::keyPressEvent(e);
 }
 void CoverFlowWidget::wheelEvent(QWheelEvent *e) {
-    if (e->phase() == Qt::ScrollBegin) m_wheelRemainder = 0;
+    if (e->phase() == Qt::ScrollBegin || e->phase() == Qt::ScrollEnd) {
+        m_wheelRemainder = 0.;
+        m_wheelAxis = 0;
+    }
+    if (e->phase() == Qt::ScrollEnd && e->pixelDelta().isNull()) {
+        e->accept();
+        return;
+    }
     const bool pixelScroll = !e->pixelDelta().isNull();
     const auto delta = pixelScroll ? e->pixelDelta() : e->angleDelta();
-    const int dominant = std::abs(delta.y()) >= std::abs(delta.x()) ? delta.y() : delta.x();
+    const int axis = std::abs(delta.y()) >= std::abs(delta.x()) ? 2 : 1;
+    if (pixelScroll && !m_wheelAxis) m_wheelAxis = axis;
+    const int dominant = (pixelScroll ? m_wheelAxis : axis) == 2 ? delta.y() : delta.x();
     // NaviGlassPlayer accumulates whole-cover steps from clamped wheel
     // packets. A burst updates the destination of the running transition.
     const double step = pixelScroll ? qBound(-1.2, -dominant * .018, 1.2) : -dominant / 120.;

@@ -119,6 +119,13 @@ def main():
         report = evidence / "pitunes-display.log"
         reference.run("mcopy", "-i", fat, "::pitunes-display.log", report)
         assert "LightDM journal" in report.read_text(), "Display report is incomplete"
+        if "classified counts" in report.read_text():
+            hardware = evidence / "pitunes-hardware.txt"
+            reference.run("mcopy", "-i", fat, "::pitunes-hardware.txt", hardware)
+            observations = hardware.read_text()
+            assert "Source: " in observations and "ALSA playback devices" in observations
+            assert "MPD journal and recent log (classified counts)" in observations
+            assert "Music fixture" not in observations and "BEGIN OPENSSH" not in observations
     (evidence / "native-smoke-result.json").write_text(json.dumps({
         "measurementKind": "virtual machine smoke test", "architecture": args.arch,
         "memoryMiB": 1024, "biosOfflineNativeGui": True, "uefiGuiAndSilentWavPlayback": True,

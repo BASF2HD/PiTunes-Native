@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '22'
       - run: ./tools/validate-release.sh
-      - run: python -m unittest tests.test_album_scanner_identity tests.test_music_export_queries tests.test_userdata_playlists tests.test_playback_modes tests.test_system_update tests.test_native_policy tests.test_native_staging tests.test_browser_migration tests.test_native_http -v
+      - run: python -m unittest tests.test_album_scanner_identity tests.test_music_export_queries tests.test_userdata_playlists tests.test_playback_modes tests.test_system_update tests.test_native_policy tests.test_native_staging tests.test_browser_migration tests.test_native_http tests.test_atom_hardware -v
       - run: node --test tests/*.test.mjs
   package:
     runs-on: ubuntu-24.04

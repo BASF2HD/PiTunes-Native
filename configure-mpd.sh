@@ -4,10 +4,32 @@ set -euo pipefail
 MODE="${1:-auto}"
 HAT_OVERLAY="${HAT_OVERLAY:-}"
 MIXER_TYPE="${MIXER_TYPE:-software}"
+ALSA_DEVICE="${ALSA_DEVICE:-default}"
+MIXER_CONTROL="${MIXER_CONTROL:-}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root: sudo ./configure-mpd.sh [auto|usb-dac|dac-hat|hdmi|headphones]"
   exit 1
+fi
+
+case "${MIXER_TYPE}" in
+  software|hardware|none) ;;
+  *) echo "Invalid ALSA mixer type." >&2; exit 2 ;;
+esac
+if [ "${MODE}" = "pc-alsa" ]; then
+  if [[ ! "${ALSA_DEVICE}" =~ ^(default|(plughw|hw):([0-9]+,[0-9]+|CARD=[A-Za-z0-9_]+,DEV=[0-9]+))$ ]]; then
+    echo "Select a valid ALSA playback device." >&2
+    exit 2
+  fi
+  if [ -n "${MIXER_CONTROL}" ]; then
+    control_pattern='^[ A-Za-z0-9_.+()-]{1,60}$'
+    if [[ "${MIXER_TYPE}" != hardware || ! "${ALSA_DEVICE}" =~ CARD=([A-Za-z0-9_]+), || ! "${MIXER_CONTROL}" =~ ${control_pattern} ]]; then
+      echo "Invalid hardware mixer control." >&2
+      exit 2
+    fi
+    card="${ALSA_DEVICE#*CARD=}"
+    card="${card%%,*}"
+  fi
 fi
 
 if ! mountpoint -q /mnt/music; then
@@ -21,7 +43,10 @@ if [ -w /mnt/music ] && ! mountpoint -q /mnt/music; then
   chown -R mpd:audio /mnt/music
 fi
 
-cat >/etc/mpd.conf <<'EOF'
+config="$(mktemp /etc/.pitunes-mpd.XXXXXX)"
+previous=""
+trap 'rm -f -- "${config}" "${previous}"' EXIT
+cat >"${config}" <<'EOF'
 music_directory         "/mnt/music"
 playlist_directory      "/var/lib/mpd/playlists"
 db_file                 "/var/lib/mpd/tag_cache"
@@ -54,7 +79,14 @@ max_playlist_length     "16384"
 max_connections         "20"
 EOF
 
+sed -i 's/${MIXER_TYPE}/'"${MIXER_TYPE}"'/' "${config}"
 case "${MODE}" in
+  pc-alsa)
+    sed -i "/name .*ALSA default/a\\        device          \"${ALSA_DEVICE}\"" "${config}"
+    if [ -n "${MIXER_CONTROL}" ]; then
+      sed -i "/mixer_type/a\\        mixer_device    \"hw:CARD=${card}\"\n        mixer_control   \"${MIXER_CONTROL}\"" "${config}"
+    fi
+    ;;
   auto)
     rm -f /etc/asound.conf
     ;;
@@ -95,5 +127,22 @@ EOF
     ;;
 esac
 
-timeout 12s systemctl restart mpd 2>/dev/null || true
+if [[ "${MODE}" = pc-alsa && "${PITUNES_IMAGE_BUILD:-0}" != 1 ]] && [ -f /etc/mpd.conf ]; then
+  previous="$(mktemp /etc/.pitunes-mpd-previous.XXXXXX)"
+  cp -p /etc/mpd.conf "${previous}"
+fi
+chmod 0644 "${config}"
+mv -f -- "${config}" /etc/mpd.conf
+if [[ "${MODE}" = pc-alsa && "${PITUNES_IMAGE_BUILD:-0}" != 1 ]]; then
+  if ! timeout 12s systemctl restart mpd; then
+    if [ -n "${previous}" ]; then
+      mv -f -- "${previous}" /etc/mpd.conf
+      timeout 8s systemctl restart mpd || true
+    fi
+    echo "MPD could not start with this ALSA configuration. See the MPD service journal." >&2
+    exit 1
+  fi
+else
+  timeout 12s systemctl restart mpd 2>/dev/null || true
+fi
 echo "MPD configured for ${MODE} output and /mnt/music library."

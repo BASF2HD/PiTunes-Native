@@ -1,6 +1,6 @@
 # Known issues and historical failures
 
-Evidence inherited from dd34c46 and the transfer; no physical native testing yet.
+Historical evidence is inherited from dd34c46. The owner also completed the first physical i386 USB boot. See [Atom hardware observations](ATOM_HARDWARE.md).
 
 | Issue | Evidence / status | Required action |
 |---|---|---|
@@ -26,7 +26,7 @@ Evidence inherited from dd34c46 and the transfer; no physical native testing yet
 | `free -h` available field wrong | Fixed in native adaptation with regression fixture | Target measurements still pending. |
 | Signed Pi A/B incomplete physical validation | Script tests only | Power-loss/watchdog/tryboot matrix, no PC A/B claim. |
 | Original workflows moving dependencies | PiShrink master, live Debian suites | Pin/verify base/toolchain inputs and record package manifests. |
-| Native images/hardware/performance | Development images and PC VM evidence in PROGRESS; no physical evidence | Do not publish stable images or promised RAM/frame rates. |
+| Native images/hardware/performance | Development images and PC VM evidence in PROGRESS. Atom USB boot confirmed, target performance unmeasured | Do not publish stable images or promised RAM/frame rates. |
 
 Do not repeat: title-only grouping, per-singer albums, full-queue synchronous
 startup, queue resets during polls, stale async drawer results, continuous idle

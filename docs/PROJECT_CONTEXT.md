@@ -71,7 +71,7 @@ Live releases: Pi stable `v1.4.4` at `9920a40` (15 November), PC prerelease
 Original Actions [run 45865676142](https://github.com/BASF2HD/PiTunes/actions/runs/45865676142)
 at dd34c46 succeeded for both PC architectures. Its QEMU/OCR/silence-WAV tests do
 not establish real DAC quality, 1 GB responsiveness or physical GPU compatibility.
-No native physical boot or performance measurements exist yet.
+An owner-reported physical i386 USB boot exposed hardware and input issues. Physical performance measurements remain outstanding. See [Atom hardware observations](ATOM_HARDWARE.md).
 
 Read ARCHITECTURE_AUDIT for source ownership, ARCHITECTURE_DECISIONS for choices,
 KNOWN_ISSUES for gaps, FEATURE_PARITY for migration status and PROGRESS to resume.

@@ -330,3 +330,27 @@ in the Pi OS rootfs and passed the no-browser/offscreen software-render check.
 Their firmware boot, HATs and displays remain untested. Inherited Pi build output
 still mentions a Chromium splash and legacy publish command; these are stale log
 messages, not installed browser packages or authorization to publish a release.
+
+## Intel Atom physical test follow-up
+
+The owner confirmed the i386 development USB boots on the real 1 GB PC and
+recognises the separate music USB. Photos indicate missing b43 ucode15,
+ACPI firmware errors that did not prevent boot, and an unresolved playback 502.
+The earlier four-architecture browser audit is independent of this result.
+The 38161d0 i386 image passed the expanded 1 GiB native BIOS/UEFI, fault isolation
+and remote web smoke test in [Actions](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46063960115).
+
+Implemented low-memory animation and performance monitoring, ALSA PCM discovery
+and hardware mixer selection, firmware-aware Wi-Fi status and interface
+discovery, libinput tap-to-click, and a boot report on the Mac-readable FAT
+partition. Added synthetic HDA, legacy Atom, Wi-Fi and log redaction cases.
+The current revision needs a fresh i386 development image and a physical retest
+of audio, networking, touch input, fluid animation and monitor overhead.
+The user guide includes per-machine b43 installation and an SSD installer design.
+See [Atom hardware](ATOM_HARDWARE.md) and [Performance](PERFORMANCE.md).
+
+Local verification for this milestone used macOS arm64 Qt 5 Release. The native
+contract suite passed, including seek width/centre alignment, Lightweight
+render sampling, monitor CSV and the disabled sampler. Python discovery
+passed 40 tests, JavaScript passed 24 tests, and the release validator passed.
+No physical performance metrics were collected in this workspace.

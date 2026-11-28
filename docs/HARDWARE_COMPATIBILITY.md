@@ -2,7 +2,7 @@
 
 | Target | Source/build configuration | Physical native boot | Audio / input / resources |
 |---|---|---|---|
-| i386 Atom 1 GB | Debian 12 image built; BIOS + IA32 UEFI 1 GiB QEMU smoke passed | Not tested | VM silent-WAV only; physical input/resources untested |
+| i386 Atom 1 GB | Debian 12 image built; BIOS + IA32 UEFI 1 GiB QEMU smoke passed | Owner confirmed USB boot | USB album browsing works; animation, Wi-Fi, built-in audio and trackpad problems reported. Retest fixes and collect measurements. |
 | amd64 Intel/AMD | Debian 13 image built; BIOS + x64 UEFI 1 GiB QEMU smoke passed | Not tested | VM silent-WAV only; physical input/resources untested |
 | armhf Zero 2 W / Pi 3 / 3 B+ | Pi OS Lite Bookworm image built | Not tested | Not tested |
 | arm64 Pi 4 / Pi 5 | Pi OS Lite Bookworm image built | Not tested | Not tested |

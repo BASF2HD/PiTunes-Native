@@ -1,0 +1,11 @@
+[Unit]
+Description=Save sanitized PiTunes Native PC boot observations
+RequiresMountsFor=/boot/efi
+ConditionPathExists=/etc/pitunes-pc-image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/pitunes-pc/hardware-report
+TimeoutStartSec=60
+Nice=15
+IOSchedulingClass=idle

@@ -49,8 +49,11 @@ double coverMoveProgress(double seconds) {
 
 CoverPose animateCover(const CoverPose &from, const CoverPose &to, double seconds) {
     const double move = coverMoveProgress(seconds);
-    // Match the separate position and rotation tweens used by NaviGlassPlayer.
-    const double turn = easeOut(seconds, .28);
+    // Keep the 280 ms yaw settle, but spend more of the visible glide turning.
+    // The previous cubic finished most of the yaw while the face was still
+    // tucked under its neighbour, making the rest look like a flat slide.
+    const double turnTail = 1. - std::clamp(seconds / .28, 0., 1.);
+    const double turn = 1. - turnTail * turnTail;
     return {blend(from.x, to.x, move), blend(from.depth, to.depth, move), blend(from.yaw, to.yaw, turn)};
 }
 

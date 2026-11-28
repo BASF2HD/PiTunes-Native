@@ -7,6 +7,14 @@ STATION_CONNECTION="${PITUNES_WIFI_STATION_CONNECTION:-PiTunes-WiFi}"
 STATION_BOOT_WAIT_SECONDS="${STATION_BOOT_WAIT_SECONDS:-6}"
 STATE_DIR="/run/pitunes"
 STATE_FILE="${STATE_DIR}/wifi-hotspot.state"
+source "$(dirname "${BASH_SOURCE[0]}")/wifi-interface.sh"
+
+require_wifi() {
+  if [ -z "${WLAN_INTERFACE}" ]; then
+    echo "No Wi-Fi interface detected. Check adapter firmware and hardware radio switch in Settings." >&2
+    return 1
+  fi
+}
 
 load_config() {
   # shellcheck disable=SC1090
@@ -16,7 +24,7 @@ load_config() {
   AP_IP="${AP_IP:-172.24.1.1}"
   AP_CHANNEL="${AP_CHANNEL:-6}"
   COUNTRY_CODE="${COUNTRY_CODE:-GB}"
-  WLAN_INTERFACE="${WLAN_INTERFACE:-wlan0}"
+  WLAN_INTERFACE="$(find_wifi_interface "${WLAN_INTERFACE:-wlan0}" || true)"
   AUTO_HOTSPOT="${AUTO_HOTSPOT:-1}"
   FORCE_HOTSPOT="${FORCE_HOTSPOT:-0}"
   AP_CONNECTION="${AP_CONNECTION:-PiTunes-Hotspot}"
@@ -37,6 +45,7 @@ require_networkmanager() {
 }
 
 active_connection() {
+  [ -n "${WLAN_INTERFACE}" ] || return 0
   nmcli -g GENERAL.CONNECTION device show "${WLAN_INTERFACE}" 2>/dev/null | head -n1
 }
 
@@ -138,6 +147,7 @@ configure_hotspot() {
 
 start_hotspot() {
   load_config
+  require_wifi
   require_networkmanager
   rfkill unblock wifi 2>/dev/null || true
   nmcli radio wifi on
@@ -160,6 +170,7 @@ stop_hotspot() {
 
 restart_station() {
   load_config
+  require_wifi
   require_networkmanager
   stop_hotspot
   nmcli radio wifi on
@@ -173,7 +184,10 @@ status_network() {
   local connection
   local ip
   connection="$(active_connection)"
-  ip="$(ip -4 -o addr show dev "${WLAN_INTERFACE}" 2>/dev/null | awk '$4 !~ /^169\\.254\\./ {print $4; exit}' | cut -d/ -f1)"
+  ip=""
+  if [ -n "${WLAN_INTERFACE}" ]; then
+    ip="$(ip -4 -o addr show dev "${WLAN_INTERFACE}" 2>/dev/null | awk '$4 !~ /^169\\.254\\./ {print $4; exit}' | cut -d/ -f1)"
+  fi
   if [ "${connection}" = "${AP_CONNECTION}" ]; then
     printf 'mode=hotspot\nip=%s\ninterface=%s\nssid=%s\nap_ssid=%s\n' "${ip:-${AP_IP}}" "${WLAN_INTERFACE}" "" "${AP_SSID}"
   elif [ -n "${ip}" ]; then
@@ -187,6 +201,7 @@ status_network() {
 
 scan_networks() {
   load_config
+  require_wifi
   require_networkmanager
   if hotspot_active && command -v iw >/dev/null 2>&1; then
     iw dev "${WLAN_INTERFACE}" scan ap-force && return 0
@@ -200,6 +215,11 @@ auto_hotspot() {
   load_config
   require_networkmanager
   sleep 20
+  load_config
+  if [ -z "${WLAN_INTERFACE}" ]; then
+    log "No Wi-Fi interface. Recovery hotspot is unavailable."
+    return 0
+  fi
   if [ "${FORCE_HOTSPOT}" = "1" ]; then
     start_hotspot
   elif [ "${AUTO_HOTSPOT}" != "1" ] || has_ethernet || has_wlan_station; then
@@ -215,6 +235,11 @@ watch_network() {
   require_networkmanager
   wait_for_station_boot
   while true; do
+    load_config
+    if [ -z "${WLAN_INTERFACE}" ]; then
+      sleep 15
+      continue
+    fi
     if handoff_active; then
       log "WiFi handoff in progress."
     elif [ "${FORCE_HOTSPOT}" = "1" ]; then

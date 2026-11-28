@@ -15,6 +15,20 @@ install -D -m 0755 "${here}/display-report.sh" /usr/local/libexec/pitunes-pc/dis
 install -D -m 0644 "${here}/lightdm.conf" /etc/systemd/system/lightdm.service.d/pitunes-pc.conf
 install -D -m 0644 "${here}/display-report.service" /etc/systemd/system/pitunes-pc-display-report.service
 install -D -m 0644 "${here}/mount-music.service" /etc/systemd/system/pitunes-mount.service
+install -D -m 0755 "${here}/hardware-report.py" /usr/local/libexec/pitunes-pc/hardware-report
+install -D -m 0644 "${here}/hardware-report.service" /etc/systemd/system/pitunes-pc-hardware-report.service
+install -D -m 0644 "${here}/hardware-report.timer" /etc/systemd/system/pitunes-pc-hardware-report.timer
+systemctl enable pitunes-pc-hardware-report.timer
+
+install -d /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/90-pitunes-touchpad.conf <<'EOF'
+Section "InputClass"
+    Identifier "PiTunes touchpad tap to click"
+    MatchIsTouchpad "on"
+    MatchDriver "libinput"
+    Option "Tapping" "on"
+EndSection
+EOF
 
 # NAS access is a client operation. Receiving audio and sharing files are opt-in.
 systemctl disable pitunes-samba-late.timer nmbd.service smbd.service pitunes-hotspot.service \

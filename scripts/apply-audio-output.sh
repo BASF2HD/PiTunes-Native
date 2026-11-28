@@ -175,6 +175,17 @@ apply_route() {
   local overlay=""
   local -a extras=()
 
+  if [ -f /etc/pitunes-pc-image ]; then
+    case "${route}" in
+      pc-alsa|hdmi|headphones|usb-dac)
+        ALSA_DEVICE="${alsa_device}" MIXER_TYPE="${mixer}" MIXER_CONTROL="${5:-}" "${CONFIGURE_MPD}" pc-alsa
+        printf '{"ok":true,"route":"%s","message":"ALSA playback device saved.","reboot_required":false}\n' "${route}"
+        return
+        ;;
+      *) echo "Unsupported PC audio route." >&2; return 2 ;;
+    esac
+  fi
+
   case "${route}" in
     dac-hat)
       if [ -z "${hat_id}" ]; then
@@ -275,7 +286,7 @@ PY
     exit 2
   fi
 
-  apply_route "${route}" "${hat_id}" "${alsa_device}" "${mixer}"
+  apply_route "${route}" "${hat_id}" "${alsa_device}" "${mixer}" "${5:-}"
 }
 
 main "$@"

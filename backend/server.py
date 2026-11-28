@@ -2171,7 +2171,7 @@ class Handler(BaseHTTPRequestHandler):
                         body = post_json(self)
                         settings = load_settings()
                         result = apply_audio_output(settings, body)
-                        for key in ("audio_output", "dac_hat", "alsa_device", "mixer"):
+                        for key in ("audio_output", "dac_hat", "alsa_device", "mixer", "mixer_control"):
                             if key in body:
                                 settings[key] = body[key]
                         if "output" in body:

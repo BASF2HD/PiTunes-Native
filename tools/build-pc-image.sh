@@ -122,7 +122,7 @@ run apt-get install -y --no-install-recommends "${KERNEL}" initramfs-tools e2fsp
   grub-pc-bin "${EFI_PACKAGE}" grub2-common iproute2 iputils-ping gawk wireless-regdb \
   "${PC_FIRMWARE[@]}" firmware-sof-signed \
   firmware-iwlwifi firmware-atheros firmware-realtek firmware-brcm80211 firmware-amd-graphics \
-  xserver-xorg-video-fbdev xserver-xorg-video-vesa
+  xserver-xorg-input-libinput xserver-xorg-video-fbdev xserver-xorg-video-vesa pciutils usbutils
 
 SOURCE="${TARGET}/tmp/pitunes-src"
 mkdir "${SOURCE}"

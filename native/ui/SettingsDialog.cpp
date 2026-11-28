@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "PerformanceMonitor.h"
 #include "PlayerIcons.h"
 #include "TouchKeyboard.h"
 #include "models/Domain.h"
@@ -8,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QRegularExpression>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -237,7 +240,9 @@ void populateMacOutputs(QComboBox *choice) {
 #endif
 }
 
-SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *parent) : QDialog(parent) {
+SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *parent,
+                               AnimationMode animation, PerformanceMonitor *monitor, bool forceReducedMotion)
+    : QDialog(parent) {
     setWindowTitle("Application settings"); resize(650, 490);
     setWindowFlags(windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -361,7 +366,45 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         preview();
     });
     reset->setMaximumWidth(170);
-    if (!api) return;
+    const auto setupDisplaySettings = [=](QFormLayout *system) {
+        auto *modes = comboBox(system);
+        modes->addItems({"Full", "Lightweight", "Off"});
+        modes->setCurrentIndex(int(animation));
+        modes->setEnabled(!forceReducedMotion);
+        system->addRow("CoverFlow animation", modes);
+        connect(modes, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+            emit animationModeChanged(AnimationMode(index));
+        });
+        if (!monitor) return;
+        auto *display = comboBox(system);
+        display->addItems({"Off", "Compact overlay", "Detailed monitor"});
+        display->setCurrentIndex(int(monitor->mode()));
+        system->addRow("Performance Monitor (F12)", display);
+        connect(display, QOverload<int>::of(&QComboBox::activated), monitor, [monitor](int index) {
+            monitor->setMode(MonitorMode(index));
+        });
+        connect(monitor, &PerformanceMonitor::modeChanged, display, &QComboBox::setCurrentIndex);
+        auto *record = button(system, "Record benchmark CSV…", [=] {
+            if (monitor->recording()) {
+                monitor->stopRecording();
+                return;
+            }
+            const auto path = QFileDialog::getSaveFileName(this, "Record benchmark CSV", "pitunes-performance.csv", "CSV (*.csv)");
+            monitor->startRecording(path);
+        });
+        const auto labelRecord = [record](bool active) {
+            record->setText(active ? "Stop and save benchmark" : "Record benchmark CSV…");
+        };
+        labelRecord(monitor->recording());
+        connect(monitor, &PerformanceMonitor::recordingChanged, record, labelRecord);
+        connect(monitor, &PerformanceMonitor::recordingSaved, this, [status](const QString &path, bool saved) {
+            status->setText(saved ? "Saved " + QFileInfo(path).fileName() : "Could not save the benchmark CSV.");
+        });
+    };
+    if (!api) {
+        setupDisplaySettings(page("System"));
+        return;
+    }
 
     auto *library = page("Library");
     auto *musicRow = new QHBoxLayout;
@@ -411,10 +454,44 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         auto *route = comboBox(audio); auto *device = comboBox(audio); auto *hat = comboBox(audio);
         auto *mixer = comboBox(audio); mixer->addItems({"software", "hardware", "none"});
         route->setObjectName("applianceAudioRoute");
-        audio->addRow("Output", route); audio->addRow("ALSA device", device); audio->addRow("Pi DAC HAT", hat); audio->addRow("Mixer", mixer);
+        audio->addRow("Output", route);
+        audio->addRow("ALSA device", device);
+        audio->addRow("Pi DAC HAT", hat);
+        audio->addRow("Mixer", mixer);
+        auto *mixerControl = comboBox(audio);
+        auto *mixerLabel = new QLabel("Volume control");
+        audio->addRow(mixerLabel, mixerControl);
+        auto *ports = new QLabel;
+        ports->setWordWrap(true);
+        audio->addRow(ports);
+        mixerLabel->hide(); mixerControl->hide(); ports->hide();
+        const auto refreshControls = [=] {
+            const auto previous = mixerControl->currentData().toString();
+            mixerControl->clear();
+            mixerControl->addItem("Automatic", "");
+            QStringList status;
+            for (const auto &entry : device->currentData(Qt::UserRole + 1).toJsonArray()) {
+                const auto info = entry.toObject();
+                const auto name = textValue(info["name"]);
+                if (boolValue(info["volume"])) mixerControl->addItem(name, name);
+                const auto state = textValue(info["state"]);
+                if (!state.isEmpty()) status << name + ": " + state;
+            }
+            const int selected = mixerControl->findData(previous);
+            if (selected >= 0) mixerControl->setCurrentIndex(selected);
+            const bool pc = route->currentData().toString() == "pc-alsa";
+            const bool showControl = pc && mixer->currentText() == "hardware" && mixerControl->count() > 1;
+            mixerControl->setVisible(showControl);
+            mixerLabel->setVisible(showControl);
+            ports->setText(status.join(" · "));
+            ports->setVisible(pc && !status.isEmpty());
+        };
+        connect(device, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refreshControls);
+        connect(mixer, &QComboBox::currentTextChanged, this, refreshControls);
         auto *applyOutput = button(audio, "Apply output", [=] {
             api->post("/api/audio/output", {{"output", route->currentData().toString()}, {"alsa", device->currentData().toString()},
-                {"dac_hat", hat->currentData().toString()}, {"mixer", mixer->currentText()}},
+                {"dac_hat", hat->currentData().toString()}, {"mixer", mixer->currentText()},
+                {"mixer_control", mixerControl->isHidden() ? QString() : mixerControl->currentData().toString()}},
                 [guard, result](QJsonObject o, QString error) {
                     result(o, error);
                     if (guard && error.isEmpty() && boolValue(o["reboot_required"]))
@@ -425,20 +502,47 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
         api->get("/api/audio/devices", [=](QJsonObject o, QString error) {
             if (!guard) return;
             if (!error.isEmpty()) { result(o, error); return; }
-            for (const auto &v : o["routes"].toArray()) {
+            const bool pc = textValue(o["platform"]) == "pc";
+            if (pc) {
+                route->addItem("ALSA playback", "pc-alsa");
+                audio->labelForField(hat)->hide();
+                hat->hide();
+            }
+            for (const auto &v : pc ? QJsonArray{} : o["routes"].toArray()) {
                 const auto r = v.toObject();
                 route->addItem(r.isEmpty() ? textValue(v) : textValue(r["label"]), r.isEmpty() ? textValue(v) : textValue(r["id"]));
             }
             device->addItem("ALSA default", "default");
-            for (const auto &v : o["devices"].toArray()) { const auto d = v.toObject(); device->addItem(textValue(d["label"]), textValue(d["alsa"])); }
+            for (const auto &v : o["devices"].toArray()) {
+                const auto d = v.toObject();
+                const auto id = textValue(d["alsa"]);
+                if (id == "default") continue;
+                device->addItem(textValue(d["label"]), id);
+                device->setItemData(device->count() - 1, d["controls"].toArray(), Qt::UserRole + 1);
+            }
+            if (pc && device->count() == 1) result({}, "No ALSA playback devices detected. Check the hardware report.");
             for (const auto &v : o["hats"].toArray()) { const auto h = v.toObject(); hat->addItem(textValue(h["label"]), textValue(h["id"])); }
             hat->setEnabled(hat->count() > 0);
             const auto current = o["current"].toObject();
             for (auto pair : {qMakePair(route, QString("route")), qMakePair(device, QString("device")), qMakePair(hat, QString("dac_hat"))}) {
                 const int i = pair.first->findData(textValue(current[pair.second])); if (i >= 0) pair.first->setCurrentIndex(i);
             }
+            if (pc && device->currentIndex() == 0) {
+                const auto oldDevice = textValue(current["device"]);
+                const auto match = QRegularExpression("^(?:plug)?hw:(\\d+),(\\d+)$").match(oldDevice);
+                if (match.hasMatch()) {
+                    for (const auto &value : o["devices"].toArray()) {
+                        const auto d = value.toObject();
+                        if (d["card"].toInt(-1) == match.captured(1).toInt() && d["device"].toInt(-1) == match.captured(2).toInt())
+                            device->setCurrentIndex(device->findData(textValue(d["alsa"])));
+                    }
+                }
+            }
             mixer->setCurrentText(textValue(current["mixer"]));
-            applyOutput->setEnabled(!preview && route->count() > 0);
+            refreshControls();
+            const int control = mixerControl->findData(textValue(current["mixer_control"]));
+            if (control >= 0) mixerControl->setCurrentIndex(control);
+            applyOutput->setEnabled(!preview && (pc ? device->count() > 1 : route->count() > 0));
         });
     };
 #ifdef Q_OS_MACOS
@@ -482,7 +586,24 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     const auto refreshWifi = [=] {
         api->get("/api/network/wifi/status", [guard, netStatus](QJsonObject o, QString error) {
             if (!guard) return;
-            netStatus->setText(error.isEmpty() ? "Network: " + textValue(o["mode"]) + " · " + textValue(o["ip"]) : error);
+            if (!error.isEmpty()) { netStatus->setText(error); return; }
+            const auto diagnostics = o["diagnostics"].toObject();
+            const auto iface = textValue(diagnostics["interface"]);
+            const auto ip = textValue(o["ip"]);
+            QString status = "Network: " + textValue(o["mode"]);
+            if (!ip.isEmpty()) status += " · " + ip;
+            if (!diagnostics.isEmpty()) {
+                status += iface.isEmpty() ? "\nNo Wi-Fi interface detected." : "\nWi-Fi interface: " + iface;
+                const auto driver = textValue(diagnostics["driver"]);
+                if (!driver.isEmpty()) status += " · " + driver;
+                const auto radio = textValue(diagnostics["radio"]);
+                if (!radio.isEmpty()) status += " · Radio " + radio;
+                if (boolValue(diagnostics["hard_blocked"])) status += "\nWi-Fi blocked by a hardware switch.";
+                else if (boolValue(diagnostics["soft_blocked"])) status += "\nWi-Fi is software-blocked.";
+                if (boolValue(diagnostics["b43_loaded"]) && !boolValue(diagnostics["b43_ucode15_present"]))
+                    status += "\nb43 is loaded. ucode15.fw was not found in the firmware directories.";
+            }
+            netStatus->setText(status);
         }, 30000);
     };
     button(network, "Refresh network status", refreshWifi);
@@ -506,6 +627,9 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     button(network, "Start recovery hotspot", [=] { api->post("/api/network/hotspot/start", {}, result); });
     button(network, "Stop recovery hotspot", [=] { api->post("/api/network/hotspot/stop", {}, result); });
 
+    connect(tabs, &QTabWidget::currentChanged, this, [tabs, network, refreshWifi](int index) {
+        if (tabs->widget(index) == network->parentWidget()) refreshWifi();
+    });
     auto *nas = page("NAS");
     auto *protocol = comboBox(nas); protocol->addItems({"smb", "nfs"}); nas->addRow("Protocol", protocol);
     auto *server = field(nas, "Server"); auto *share = field(nas, "Share / export");
@@ -524,6 +648,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     });
 
     auto *system = page("System");
+    setupDisplaySettings(system);
     for (const auto &name : {QString("ssh"), QString("bluetooth"), QString("airplay")}) {
         auto *choice = comboBox(system); choice->addItems({"Stopped", "Enabled"}); system->addRow(name, choice);
         connect(choice, QOverload<int>::of(&QComboBox::activated), this, [=](int i) {

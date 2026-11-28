@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -12,7 +13,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HATS_FILE = PROJECT_ROOT / "config" / "dac-hats.json"
 APPLY_SCRIPT = PROJECT_ROOT / "scripts" / "apply-audio-output.sh"
 
-VALID_ROUTES = frozenset({"usb-dac", "dac-hat", "hdmi", "headphones"})
+PC_IMAGE = Path("/etc/pitunes-pc-image")
+VALID_ROUTES = frozenset({"usb-dac", "dac-hat", "hdmi", "headphones", "pc-alsa"})
+CONTROL_NAME = re.compile(r"[ A-Za-z0-9_.+()-]{1,60}")
 
 # Kernel/ALSA identifiers mapped to short labels when device text is too technical.
 CARD_ALIASES = {
@@ -75,13 +78,14 @@ def _run_aplay_list() -> str:
             text=True,
             timeout=3.0,
             check=False,
+            env={**os.environ, "LC_ALL": "C"},
         )
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired):
         return ""
     return proc.stdout or ""
 
 
-def list_alsa_devices() -> list[dict[str, Any]]:
+def list_alsa_devices(*, pc: bool = False) -> list[dict[str, Any]]:
     output = _run_aplay_list()
     devices: list[dict[str, Any]] = []
     pattern = re.compile(
@@ -102,20 +106,61 @@ def list_alsa_devices() -> list[dict[str, Any]]:
                 "short_name": (short_name or "").strip(),
                 "card_id": (card_id or "").strip(),
                 "device_desc": (device_desc or "").strip(),
+                **({"alsa": f"plughw:CARD={short_name},DEV={device}", "card_name": short_name}
+                   if pc and re.fullmatch(r"[A-Za-z0-9_]+", short_name) else {}),
             }
         )
     multi_card = len(devices) > 1
+    mixers = {}
     for entry in devices:
-        entry["label"] = _friendly_device_label(
-            entry.pop("short_name"),
-            entry.pop("card_id"),
-            entry.pop("device_desc"),
-            multi_card=multi_card,
-            card=entry["card"],
-        )
-    if not devices:
+        short = entry.pop("short_name")
+        card_name = entry.pop("card_id") or short
+        pcm_name = entry.pop("device_desc")
+        if pc:
+            entry["label"] = f"{card_name} · {_clean_device_name(pcm_name)}"
+            if entry["card"] not in mixers:
+                mixers[entry["card"]] = list_mixer_controls(entry["card"])
+            entry["controls"] = mixers[entry["card"]]
+        else:
+            entry["label"] = _friendly_device_label(short, card_name, pcm_name, multi_card=multi_card, card=entry["card"])
+    if not devices and not pc:
         devices.append({"alsa": "default", "label": "default - ALSA default output", "card": -1, "device": 0})
     return devices
+
+
+def list_mixer_controls(card: int) -> list[dict[str, Any]]:
+    try:
+        output = subprocess.run(
+            ["amixer", "-c", str(card), "scontents"], capture_output=True, text=True, timeout=2,
+            env={**os.environ, "LC_ALL": "C"}, check=False,
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return parse_mixer_controls(output)
+
+
+def parse_mixer_controls(output: str) -> list[dict[str, Any]]:
+    controls = []
+    for block in re.split(r"(?m)^Simple mixer control ", output)[1:]:
+        heading, _, body = block.partition("\n")
+        match = re.fullmatch(r"'([^']+)',0", heading)
+        if not match or not CONTROL_NAME.fullmatch(match[1]):
+            continue
+        capability = re.search(r"(?m)^\s*Capabilities: (.*)$", body)
+        if not capability:
+            continue
+        flags = capability[1].split()
+        label = match[1]
+        volume = "pvolume" in flags
+        switch = "pswitch" in flags
+        port = switch and label in {"Speaker", "Headphone"}
+        if volume or switch or label == "Auto-Mute Mode":
+            values = re.findall(r"\[(on|off)\]", body)
+            enum = re.search(r"(?m)^\s*Item0: '([^']+)'", body)
+            state = ("/".join(dict.fromkeys(values)) if values else
+                     enum[1] if enum and enum[1] in ("Enabled", "Disabled") else "")
+            controls.append({"name": label, "volume": volume, "port": port, "state": state})
+    return controls
 
 
 def load_dac_hats() -> list[dict[str, Any]]:
@@ -148,23 +193,28 @@ def normalize_route(route: str | None) -> str:
 
 
 def audio_devices_payload(settings: dict[str, Any]) -> dict[str, Any]:
-    route = normalize_route(settings.get("audio_output"))
+    pc = PC_IMAGE.is_file()
+    devices = list_alsa_devices(pc=pc)
+    routes = [
+        {"id": "hdmi", "label": "HDMI"},
+        {"id": "headphones", "label": "3.5 mm Headphones"},
+        {"id": "usb-dac", "label": "USB DAC"},
+        {"id": "dac-hat", "label": "DAC HAT (I2S)"},
+    ]
     return {
-        "devices": list_alsa_devices(),
-        "hats": load_dac_hats(),
-        "routes": [
-            {"id": "hdmi", "label": "HDMI"},
-            {"id": "headphones", "label": "3.5 mm Headphones"},
-            {"id": "usb-dac", "label": "USB DAC"},
-            {"id": "dac-hat", "label": "DAC HAT (I2S)"},
-        ],
+        "platform": "pc" if pc else "pi",
+        "devices": ([{"alsa": "default", "label": "ALSA default", "card": -1, "device": 0}] + devices) if pc else devices,
+        "hats": [] if pc else load_dac_hats(),
+        "routes": ([{"id": "pc-alsa", "label": "ALSA playback"}] + routes[:-1]) if pc else routes,
         "current": {
-            "route": route,
+            "route": normalize_route(settings.get("audio_output")),
             "device": settings.get("alsa_device") or "default",
             "mixer": settings.get("mixer") or "software",
+            "mixer_control": settings.get("mixer_control") or "",
             "dac_hat": settings.get("dac_hat") or "",
         },
     }
+
 
 
 def apply_audio_output(settings: dict[str, Any], body: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -178,6 +228,20 @@ def apply_audio_output(settings: dict[str, Any], body: dict[str, Any] | None = N
     mixer = str(body.get("mixer") or settings.get("mixer") or "software").strip().lower()
     if mixer not in ("software", "hardware", "none"):
         mixer = "software"
+
+    mixer_control = str(body.get("mixer_control") or "").strip()
+    if route == "pc-alsa":
+        if not PC_IMAGE.is_file():
+            raise ValueError("PC audio is only available on PC images.")
+        devices = list_alsa_devices(pc=True) if alsa_device != "default" else []
+        selected = next((d for d in devices if d["alsa"] == alsa_device), {})
+        if alsa_device != "default" and not selected:
+            raise ValueError("The selected ALSA playback device is unavailable.")
+        if mixer_control and (
+            mixer != "hardware"
+            or not any(c["name"] == mixer_control and c["volume"] for c in selected.get("controls", []))
+        ):
+            raise ValueError("The selected volume control is unavailable for this ALSA device.")
 
     if route == "dac-hat" and not dac_hat:
         raise ValueError("Select a DAC HAT model before applying this output route.")
@@ -200,6 +264,7 @@ def apply_audio_output(settings: dict[str, Any], body: dict[str, Any] | None = N
                 dac_hat,
                 alsa_device,
                 mixer,
+                mixer_control,
             ],
             capture_output=True,
             text=True,

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "SettingsDialog.h"
+#include "PerformanceMonitor.h"
 #include "TouchKeyboard.h"
 #include "TrackDrawer.h"
 #include "PlayerIcons.h"
@@ -121,17 +122,22 @@ private:
 };
 }
 
-MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
+MainWindow::MainWindow(QUrl api, bool demo, bool reduced, bool lightweight) : m_demo(demo) {
+    m_forceReducedMotion = reduced;
     setWindowTitle("PiTunes Native"); setWindowIcon(QIcon(":/brand/icon.png")); resize(1100, 720);
     m_api = new ApiClient(std::move(api), this);
     m_library = new LibraryModel(m_api, this);
-    reduced = reduced || QSettings().value("native/reducedMotion", false).toBool();
-    m_artwork = new ArtworkCache(m_api, reduced ? 6 : 12, this);
+    QSettings preferences;
+    const int defaultMode = preferences.value("native/reducedMotion", false).toBool()
+        ? int(AnimationMode::Off) : int(lightweight ? AnimationMode::Lightweight : AnimationMode::Full);
+    const auto mode = reduced ? AnimationMode::Off
+        : AnimationMode(qBound(0, preferences.value("native/animationMode", defaultMode).toInt(), 2));
+    m_artwork = new ArtworkCache(m_api, mode == AnimationMode::Full ? 12 : 6, this);
     m_flow = new CoverFlowWidget(m_library, m_artwork, this);
-    m_flow->setReducedMotion(reduced);
+    m_flow->setAnimationMode(mode);
+    m_monitor = new PerformanceMonitor(m_flow, this);
     m_flow->installEventFilter(this);
     const CaptionFontSizes defaults;
-    QSettings preferences;
     m_flow->setCaptionFontSizes({
         preferences.value("native/captionTitleSize", defaults.title).toInt(),
         preferences.value("native/captionArtistSize", defaults.artist).toInt(),
@@ -171,13 +177,17 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
         return button;
     };
     auto *header = new QHBoxLayout;
-    header->setContentsMargins(0, 0, 0, 0);
+    auto *leftHeader = new QHBoxLayout;
+    auto *rightHeader = new QHBoxLayout;
     header->setSpacing(6);
+    leftHeader->setSpacing(6);
+    rightHeader->setSpacing(6);
     layout->addLayout(header);
-    header->addStretch(1);
+    leftHeader->addStretch(1);
+    header->addLayout(leftHeader, 1);
     m_repeat = headerButton(PlayerIcon::Repeat, "Repeat off");
     m_repeat->setIcon(playerIcon(PlayerIcon::Repeat, false));
-    header->addWidget(m_repeat);
+    leftHeader->addWidget(m_repeat);
     connect(m_repeat, &QToolButton::clicked, this, [this] {
         const auto mode = m_player.repeatMode == "all" ? "song" : m_player.repeatMode == "song" ? "off" : "all";
         command("/api/player/options", {{"repeatMode", mode}});
@@ -186,23 +196,24 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     m_time->setMinimumWidth(72);
     m_time->setStyleSheet("font-size: 12px;");
     m_time->setAccessibleName("Playback time");
-    header->addWidget(m_time);
+    leftHeader->addWidget(m_time);
     auto *seek = new PositionSlider(root);
     m_seek = seek;
     m_seek->setAccessibleName("Playback position");
     m_seek->setFixedHeight(headerControlSize);
-    m_seek->setMaximumWidth(480);
+    m_seek->setFixedWidth(120);
     m_seek->setEnabled(false);
     m_seek->setStyleSheet(
         "QSlider::groove:horizontal { height: 4px; background: #32343b; border-radius: 2px; }"
         "QSlider::sub-page:horizontal { background: #a9adba; border-radius: 2px; }"
         "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: white; }");
-    header->addWidget(m_seek, 4);
+    header->addWidget(m_seek);
+    header->addLayout(rightHeader, 1);
     seek->grooveClicked = [this] { command("/api/player/seek", {{"seconds", m_seek->value()}}); };
     auto *searchToggle = headerButton(PlayerIcon::Search, "Open search", true);
     m_searchToggle = searchToggle;
     searchToggle->setCheckable(true);
-    header->addWidget(searchToggle);
+    rightHeader->addWidget(searchToggle);
     m_volumeButton = headerButton(PlayerIcon::Volume, "Volume", true);
     auto *volumeMenu = new FrostedMenu(m_flow, m_volumeButton);
     auto *volumeAction = new QWidgetAction(volumeMenu);
@@ -231,12 +242,12 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     volumeMenu->addAction(volumeAction);
     m_volumeButton->setMenu(volumeMenu);
     m_volumeButton->setPopupMode(QToolButton::InstantPopup);
-    header->addWidget(m_volumeButton);
+    rightHeader->addWidget(m_volumeButton);
     m_shuffle = headerButton(PlayerIcon::Shuffle, "Shuffle off");
     m_shuffle->setIcon(playerIcon(PlayerIcon::Shuffle, false));
     m_shuffle->setCheckable(true);
-    header->addWidget(m_shuffle);
-    header->addStretch(1);
+    rightHeader->addWidget(m_shuffle);
+    rightHeader->addStretch(1);
     connect(m_shuffle, &QToolButton::clicked, this, [this] {
         command("/api/player/options", {{"shuffle", !m_player.shuffle}});
     });
@@ -361,7 +372,7 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     transport->addWidget(drawer);
 
     auto *navigation = centredRow(520, 6);
-    buildBrowseMenus(navigation, m_transportPanel, reduced);
+    buildBrowseMenus(navigation, m_transportPanel);
     m_fullView = iconButton(PlayerIcon::Fullscreen, "Toggle full view", 27);
     m_fullView->setParent(m_transportPanel);
     connect(m_fullView, &QToolButton::clicked, this, [this] {
@@ -465,6 +476,11 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     connect(m_volume, &QSlider::sliderReleased, this, [this] { command("/api/player/volume", {{"volume", m_volume->value()}}); });
     auto *fullscreen = new QShortcut(QKeySequence(Qt::Key_F11), this);
     connect(fullscreen, &QShortcut::activated, this, [this] { isFullScreen() ? showNormal() : showFullScreen(); });
+    auto *monitorShortcut = new QShortcut(QKeySequence(Qt::Key_F12), this);
+    monitorShortcut->setContext(Qt::ApplicationShortcut);
+    connect(monitorShortcut, &QShortcut::activated, this, [this] {
+        m_monitor->setMode(m_monitor->mode() == MonitorMode::Off ? MonitorMode::Compact : MonitorMode::Off);
+    });
     m_poll.setInterval(1500); connect(&m_poll, &QTimer::timeout, this, &MainWindow::refreshPlayer);
     if (m_demo) m_library->setDemo();
     else { m_library->reload(); refreshPlayer(); m_poll.start(); }
@@ -474,7 +490,7 @@ void MainWindow::setMessage(const QString &message) {
     m_message->setText(message);
     m_message->setVisible(!message.isEmpty());
 }
-void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool reduced) {
+void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root) {
     const auto heading = [](QMenu *menu, const QString &title, bool main = false) {
         auto *header = new QWidgetAction(menu);
         auto *label = new QLabel(title, menu);
@@ -600,7 +616,9 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
 
     auto *settings = tab(PlayerIcon::Settings, "Settings");
     action(settings, PlayerIcon::Settings, "Application settings", [this] {
-        auto *dialog = new SettingsDialog(m_demo ? nullptr : m_api, m_flow->captionFontSizes(), this);
+        auto *dialog = new SettingsDialog(m_demo ? nullptr : m_api, m_flow->captionFontSizes(),
+                                          this, m_flow->animationMode(), m_monitor, m_forceReducedMotion);
+        connect(dialog, &SettingsDialog::animationModeChanged, this, &MainWindow::applyAnimationMode);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         connect(dialog, &SettingsDialog::captionFontSizesChanged, this, [this](CaptionFontSizes sizes) {
             m_flow->setCaptionFontSizes(sizes);
@@ -612,14 +630,14 @@ void MainWindow::buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool r
         connect(dialog, &QDialog::finished, this, [this] { QTimer::singleShot(0, this, &MainWindow::scheduleReturnToPlayback); });
         dialog->open();
     });
-    auto *reducedAction = settings->addAction("Reduced animations");
-    reducedAction->setCheckable(true);
-    reducedAction->setChecked(reduced);
-    connect(reducedAction, &QAction::toggled, this, [this](bool enabled) {
-        m_flow->setReducedMotion(enabled);
-        if (m_trackDrawer) m_trackDrawer->setReducedMotion(enabled);
-        QSettings().setValue("native/reducedMotion", enabled);
-    });
+}
+
+void MainWindow::applyAnimationMode(AnimationMode mode) {
+    if (m_forceReducedMotion) return;
+    m_artwork->setBudgetMiB(mode == AnimationMode::Full ? 12 : 6);
+    m_flow->setAnimationMode(mode);
+    if (m_trackDrawer) m_trackDrawer->setReducedMotion(mode == AnimationMode::Off);
+    QSettings().setValue("native/animationMode", int(mode));
 }
 
 void MainWindow::openBrowseMenu(QToolButton *button) {
@@ -739,6 +757,10 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void MainWindow::placeOverlays() {
+    // The side groups have equal stretch and enough room for their controls.
+    const int controlRoom = qMax(3 * headerControlSize + 12, headerControlSize + m_time->sizeHint().width() + 6) + 8;
+    const int seekWidth = qMax(1, qMin(m_flow->centreCoverRect().width(), m_flow->width() - 2 * controlRoom));
+    if (m_seek->width() != seekWidth) m_seek->setFixedWidth(seekWidth);
     m_transportPanel->setGeometry(0, m_flow->height() - footerHeight, m_flow->width(), footerHeight);
     m_fullView->move(m_transportPanel->width() - m_fullView->width() - 3,
                      m_transportPanel->height() - m_fullView->height() - 3);

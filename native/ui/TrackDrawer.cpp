@@ -315,6 +315,10 @@ TrackDrawer::TrackDrawer(CoverFlowWidget *stage, const QString &title, const QSt
     columns->addWidget(column("TITLE"), 1);
     columns->addWidget(column("TIME"));
     layout->addLayout(columns);
+    auto *separator = new QWidget(this);
+    separator->setFixedHeight(1);
+    separator->setStyleSheet("background: rgba(226,233,248,42);");
+    layout->addWidget(separator);
 
     auto *list = new TrackList(this);
     m_list = list;

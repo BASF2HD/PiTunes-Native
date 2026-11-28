@@ -65,8 +65,11 @@ QNetworkReply *ApiClient::request(const QString &path, const QByteArray *body, B
     connect(reply, &QNetworkReply::finished, this, [reply, data, error, timer, callback = std::move(callback)] {
         timer->stop();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (error->isEmpty() && (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300))
-            *error = QString("API request failed (%1): %2").arg(status).arg(reply->errorString());
+        if (error->isEmpty() && (reply->error() != QNetworkReply::NoError || status < 200 || status >= 300)) {
+            const auto detail = QJsonDocument::fromJson(*data).object().value("error").toString().simplified();
+            *error = QString("API request failed (%1): %2").arg(status).arg(
+                detail.isEmpty() ? reply->errorString() : detail.left(300));
+        }
         // User callbacks may destroy the client (and its child replies).
         // Schedule cleanup before invoking them, with no reply access afterwards.
         reply->deleteLater();

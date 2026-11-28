@@ -10,6 +10,15 @@
 #include <array>
 
 namespace PiTunes {
+enum class AnimationMode { Full, Lightweight, Off };
+
+struct FrameSample {
+    int count = 0;
+    qint64 totalNs = 0;
+    qint64 peakNs = 0;
+    qint64 activeNs = 0;
+};
+
 class CoverFlowWidget : public QWidget {
     Q_OBJECT
 public:
@@ -18,7 +27,12 @@ public:
     double visualPosition() const { return m_visualPosition; }
     void select(int index, bool animate = true);
     void setReducedMotion(bool reduced);
-    bool reducedMotion() const { return m_reduced; }
+    void setAnimationMode(AnimationMode mode);
+    AnimationMode animationMode() const { return m_animationMode; }
+    bool reducedMotion() const { return m_animationMode == AnimationMode::Off; }
+    void setFrameSampling(bool enabled);
+    FrameSample takeFrameSample();
+    qint64 firstCoverPaintMs() const { return m_firstCoverPaintMs; }
     bool animating() const { return m_timer.isActive(); }
     int visibleCoverCount() const;
     quint64 paintCount() const { return m_paints; }
@@ -65,13 +79,17 @@ private:
     ArtworkCache *m_artwork;
     QTimer m_timer;
     QTimer m_wheelIdle;
-    QElapsedTimer m_clock;
+    QElapsedTimer m_clock, m_activeFrameWindow, m_startupClock;
+    qint64 m_firstCoverPaintMs = -1;
     QHash<int, CoverPose> m_startPoses;
     double m_visualPosition = 0., m_startPosition = 0., m_seconds = 0.;
     double m_wheelRemainder = 0;
     int m_target = 0;
     int m_captionRow = -1;
-    bool m_reduced = false, m_dragging = false;
+    AnimationMode m_animationMode = AnimationMode::Full;
+    bool m_dragging = false, m_sampleFrames = false;
+    FrameSample m_frames;
+    int m_wheelAxis = 0;
     QPointF m_press;
     QVector<QPair<int, QPolygonF>> m_hits;
     QImage m_motionSurface;

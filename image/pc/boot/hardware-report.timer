@@ -1,0 +1,10 @@
+[Unit]
+Description=Capture PiTunes Native PC boot observations
+
+[Timer]
+OnBootSec=55s
+AccuracySec=5s
+Unit=pitunes-pc-hardware-report.service
+
+[Install]
+WantedBy=timers.target

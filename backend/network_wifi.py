@@ -60,18 +60,22 @@ def _nm_station_profile() -> dict:
     }
 
 
+def detected_wifi_interface(preferred: str, network_path: Path = Path("/sys/class/net")) -> str:
+    try:
+        devices = [p.name for p in sorted(network_path.iterdir())
+                   if (p / "phy80211").is_dir() or (p / "wireless").is_dir()]
+    except OSError:
+        return ""
+    return preferred if preferred in devices else next(iter(devices), "")
+
+
 def _read_hotspot_config() -> dict:
     values: dict[str, str] = {}
-    if not HOTSPOT_CONFIG.exists():
-        return {
-            "ap_ssid": "PiTunes",
-            "ap_password": "pitunesaudio",
-            "ap_ip": "172.24.1.1",
-            "country_code": "GB",
-            "wlan_interface": "wlan0",
-            "ap_connection": "PiTunes-Hotspot",
-        }
-    for line in HOTSPOT_CONFIG.read_text(encoding="utf-8").splitlines():
+    try:
+        lines = HOTSPOT_CONFIG.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -83,7 +87,7 @@ def _read_hotspot_config() -> dict:
         "ap_ip": values.get("ap_ip", "172.24.1.1"),
         "country_code": values.get("country_code", "GB"),
         "auto_hotspot": values.get("auto_hotspot", "1"),
-        "wlan_interface": values.get("wlan_interface", "wlan0"),
+        "wlan_interface": detected_wifi_interface(values.get("wlan_interface", "wlan0")),
         "ap_connection": values.get("ap_connection", "PiTunes-Hotspot"),
     }
 
@@ -131,6 +135,8 @@ def _read_connect_state() -> dict:
 
 def hotspot_active() -> bool:
     cfg = _read_hotspot_config()
+    if not cfg["wlan_interface"]:
+        return False
     proc = _run(
         ["/usr/bin/nmcli", "-g", "GENERAL.CONNECTION", "device", "show", cfg["wlan_interface"]],
         timeout=5,
@@ -205,6 +211,44 @@ def _ethernet_status(interfaces: dict[str, dict], default_route: dict) -> dict:
     }
 
 
+def _wifi_diagnostics(interface: str) -> dict:
+    def value(path: Path) -> str:
+        try:
+            return path.read_text(encoding="ascii").strip()
+        except (OSError, UnicodeError):
+            return ""
+
+    blocked = []
+    for radio in sorted(Path("/sys/class/rfkill").glob("rfkill*")):
+        if value(radio / "type") == "wlan":
+            blocked.append({"hard": value(radio / "hard") == "1", "soft": value(radio / "soft") == "1"})
+    b43 = Path("/sys/module/b43").is_dir()
+    # b43 firmware files can be compressed or provided by the alternative
+    # open firmware directory, so treat these as observations, not attribution.
+    b43_files = any(Path("/lib/firmware").glob("b43*/ucode15.fw*"))
+    driver = ""
+    if interface:
+        path = Path("/sys/class/net") / interface / "device" / "driver"
+        if path.is_symlink():
+            driver = path.resolve().name
+    radio_state = "unknown"
+    try:
+        radio = _run(["/usr/bin/nmcli", "-t", "radio", "wifi"], timeout=3)
+        if radio.returncode == 0 and radio.stdout.strip() in ("enabled", "disabled"):
+            radio_state = radio.stdout.strip()
+    except subprocess.TimeoutExpired:
+        pass
+    return {
+        "interface": interface,
+        "driver": driver,
+        "hard_blocked": any(r["hard"] for r in blocked),
+        "soft_blocked": any(r["soft"] for r in blocked),
+        "radio": radio_state,
+        "b43_loaded": b43,
+        "b43_ucode15_present": b43_files,
+    }
+
+
 def wifi_status() -> dict:
     cfg = _read_hotspot_config()
     interfaces = _interface_statuses()
@@ -248,6 +292,7 @@ def wifi_status() -> dict:
     return {
         "mode": mode,
         "ip": ip,
+        "diagnostics": _wifi_diagnostics(wlan_interface),
         "connection": connection_state,
         "default_route": default_route,
         "ethernet": ethernet,
@@ -284,7 +329,9 @@ def _wpa_configured() -> bool:
     )
 
 
-def _connected_ssid(interface: str = "wlan0") -> str:
+def _connected_ssid(interface: str) -> str:
+    if not interface:
+        return ""
     proc = _run(["/usr/bin/nmcli", "-g", "GENERAL.CONNECTION", "device", "show", interface], timeout=5)
     connection = (proc.stdout or "").strip() if proc.returncode == 0 else ""
     if connection and connection != "--":
@@ -488,7 +535,7 @@ def _parse_iw_scan(output: str) -> list[dict]:
 
 def _wifi_connect_worker(ssid: str, password: str, country: str, restore_hotspot: bool) -> None:
     try:
-        # Let the hotspot client receive the API acknowledgement before wlan0 changes mode.
+        # Let the hotspot client receive the API acknowledgement before the wireless interface changes mode.
         time.sleep(5)
         _write_connect_state("connecting", f"Switching from the PiTunes hotspot to {ssid}.", ssid)
         proc = _run(
@@ -527,6 +574,8 @@ def _wifi_connect_worker(ssid: str, password: str, country: str, restore_hotspot
 def wifi_connect(ssid: str, password: str, country: str = "GB") -> dict:
     if not ssid:
         raise ValueError("ssid is required")
+    if not _read_hotspot_config()["wlan_interface"]:
+        raise ValueError("No Wi-Fi interface detected. Check firmware and the hardware radio switch.")
     saved = _nm_station_profile()
     if not password and saved.get("ssid") == ssid:
         password = str(saved.get("password") or "")

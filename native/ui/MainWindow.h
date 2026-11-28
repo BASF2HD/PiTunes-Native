@@ -16,11 +16,12 @@ class QJsonArray;
 class QMenu;
 namespace PiTunes {
 class TrackDrawer;
+class PerformanceMonitor;
 class MediaInfoPanel;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QUrl api, bool demo = false, bool reduced = false);
+    explicit MainWindow(QUrl api, bool demo = false, bool reduced = false, bool lightweight = false);
     CoverFlowWidget *coverFlow() const { return m_flow; }
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -33,7 +34,8 @@ private:
     void showTracks(const QString &title, const QVector<Track> &tracks, const QString &albumId = {}, const QString &year = {});
     void closeTrackDrawer();
     void showCollection(QString title, QString path, QString key, QString filterPrefix, QString sort = {});
-    void buildBrowseMenus(QHBoxLayout *navigation, QWidget *root, bool reduced);
+    void buildBrowseMenus(QHBoxLayout *navigation, QWidget *root);
+    void applyAnimationMode(AnimationMode mode);
     void openBrowseMenu(QToolButton *button);
     void selectBrowseTab(const QString &name);
     void browseArtistShelf();
@@ -80,6 +82,8 @@ private:
     QToolButton *m_fullView;
     QToolButton *m_searchToggle;
     QFrame *m_searchPanel, *m_transportPanel;
+    PerformanceMonitor *m_monitor;
+    bool m_forceReducedMotion = false;
     QSlider *m_seek, *m_volume, *m_albumStrip;
     int m_volumeBeforeMute = 25;
     QTimer m_poll, m_searchDelay, m_snapBack;

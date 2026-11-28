@@ -4,6 +4,7 @@
 #include "ui/MainWindow.h"
 #include "ui/MediaInfoPanel.h"
 #include "ui/RadioDialog.h"
+#include "ui/PerformanceMonitor.h"
 #include "ui/SettingsDialog.h"
 #include "ui/TrackDrawer.h"
 #include <QBuffer>
@@ -24,6 +25,8 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
+#include <QTemporaryDir>
+#include <QFile>
 #include <QToolButton>
 #include <QUrlQuery>
 #include <QWheelEvent>
@@ -119,7 +122,9 @@ private slots:
             if (slider->accessibleName() == "Playback position") seek = slider;
         QVERIFY(seek);
         QTRY_COMPARE(seek->maximum(), 400);
-        QVERIFY(seek->width() <= 480);
+        QCOMPARE(seek->width(), window.coverFlow()->centreCoverRect().width());
+        const auto coverCentre = window.coverFlow()->mapToGlobal(window.coverFlow()->centreCoverRect().center()).x();
+        QVERIFY(qAbs(seek->mapToGlobal(seek->rect().center()).x() - coverCentre) <= 1);
         QCOMPARE(seek->height(), 24);
         QTest::mouseClick(seek, Qt::LeftButton, Qt::NoModifier, seek->rect().center());
         QTRY_COMPARE(seeks.size(), 1);
@@ -1023,6 +1028,40 @@ private slots:
                 QVERIFY(qAbs(reflectedHeight / height - .5) < .001);
             }
         }
+    }
+    void lightweightModePaintsAndMonitorStopsWhenOff() {
+        HttpFixture server;
+        MainWindow window(server.url(), true, false, true);
+        window.show();
+        auto *flow = window.coverFlow();
+        QCOMPARE(flow->animationMode(), AnimationMode::Lightweight);
+        auto *monitor = window.findChild<PerformanceMonitor *>();
+        QVERIFY(monitor);
+        QCOMPARE(monitor->mode(), MonitorMode::Off);
+        monitor->setMode(MonitorMode::Detailed);
+        QVERIFY(monitor->text().contains("0 FPS (idle)"));
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("test.csv");
+        monitor->startRecording(path);
+        flow->select(2);
+        QVERIFY(flow->animating());
+        QTest::qWait(180);
+        const auto active = flow->takeFrameSample();
+        QVERIFY(active.count > 0);
+        QVERIFY(active.activeNs > 0 && active.peakNs > 0);
+        QTRY_VERIFY(!flow->animating());
+        QTest::qWait(1100);
+        monitor->setMode(MonitorMode::Off);
+        QVERIFY(!monitor->isVisible() && !monitor->recording());
+        QFile report(path);
+        QVERIFY(report.open(QIODevice::ReadOnly));
+        const auto csv = report.readAll();
+        QVERIFY(csv.contains("animation_fps,frame_count,active_animation_ms"));
+        QVERIFY(csv.count('\n') >= 2);
+        flow->select(1);
+        QTest::qWait(120);
+        QCOMPARE(flow->takeFrameSample().count, 0);
     }
     void motionTurnsFirstAndGlidesToTheRestingGeometry() {
         const auto side = coverPose(1.);

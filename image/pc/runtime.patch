@@ -1,41 +1,3 @@
-diff --git a/backend/audio_output.py b/backend/audio_output.py
-index 6e86add..05ea2d0 100644
---- a/backend/audio_output.py
-+++ b/backend/audio_output.py
-@@ -3,6 +3,7 @@
- from __future__ import annotations
- 
- import json
-+import platform
- import re
- import subprocess
- from pathlib import Path
-@@ -149,15 +150,18 @@ def normalize_route(route: str | None) -> str:
- 
- def audio_devices_payload(settings: dict[str, Any]) -> dict[str, Any]:
-     route = normalize_route(settings.get("audio_output"))
-+    routes = [
-+        {"id": "hdmi", "label": "HDMI"},
-+        {"id": "headphones", "label": "3.5 mm Headphones"},
-+        {"id": "usb-dac", "label": "USB DAC"},
-+    ]
-+    pc = platform.machine() in {"x86_64", "i386", "i486", "i586", "i686"}
-+    if not pc:
-+        routes.append({"id": "dac-hat", "label": "DAC HAT (I2S)"})
-     return {
-         "devices": list_alsa_devices(),
--        "hats": load_dac_hats(),
--        "routes": [
--            {"id": "hdmi", "label": "HDMI"},
--            {"id": "headphones", "label": "3.5 mm Headphones"},
--            {"id": "usb-dac", "label": "USB DAC"},
--            {"id": "dac-hat", "label": "DAC HAT (I2S)"},
--        ],
-+        "hats": [] if pc else load_dac_hats(),
-+        "routes": routes,
-         "current": {
-             "route": route,
-             "device": settings.get("alsa_device") or "default",
 diff --git a/backend/library/system.py b/backend/library/system.py
 index d107630..ac72f1d 100644
 --- a/backend/library/system.py
@@ -72,46 +34,6 @@ index e216a2f..8ea6c64 100644
          details = [path]
          if filesystem:
              details.append(filesystem)
-diff --git a/configure-mpd.sh b/configure-mpd.sh
-index ec2d456..505667c 100755
---- a/configure-mpd.sh
-+++ b/configure-mpd.sh
-@@ -4,12 +4,24 @@ set -euo pipefail
- MODE="${1:-auto}"
- HAT_OVERLAY="${HAT_OVERLAY:-}"
- MIXER_TYPE="${MIXER_TYPE:-software}"
-+ALSA_DEVICE="${ALSA_DEVICE:-default}"
- 
- if [ "$(id -u)" -ne 0 ]; then
-   echo "Run as root: sudo ./configure-mpd.sh [auto|usb-dac|dac-hat|hdmi|headphones]"
-   exit 1
- fi
- 
-+if [ "${MODE}" = "pc-alsa" ]; then
-+  if [[ ! "${ALSA_DEVICE}" =~ ^(default|(plughw|hw):[0-9]+,[0-9]+)$ ]]; then
-+    echo "Select a valid ALSA playback device." >&2
-+    exit 1
-+  fi
-+  case "${MIXER_TYPE}" in
-+    software|hardware|none) ;;
-+    *) echo "Invalid ALSA mixer type." >&2; exit 1 ;;
-+  esac
-+fi
-+
- if ! mountpoint -q /mnt/music; then
-   install -d -m 0775 -o mpd -g audio /mnt/music
- fi
-@@ -55,6 +67,10 @@ max_connections         "20"
- EOF
- 
- case "${MODE}" in
-+  pc-alsa)
-+    sed -i -e "s/\${MIXER_TYPE}/${MIXER_TYPE}/" \
-+      -e "/name .*ALSA default/a\        device          \"${ALSA_DEVICE}\"" /etc/mpd.conf
-+    ;;
-   auto)
-     rm -f /etc/asound.conf
-     ;;
 diff --git a/frontend/assets/app.js b/frontend/assets/app.js
 index 751f479..a8b95d8 100644
 --- a/frontend/assets/app.js
@@ -249,28 +171,6 @@ index 89dd4b2..b1ccd0d 100755
 +systemctl mask pitunes-update.service pitunes-system-update.service pitunes-system-boot-check.service
 +
  if [ -f /etc/pitunes/system-update.json ]; then
-diff --git a/scripts/apply-audio-output.sh b/scripts/apply-audio-output.sh
-index 278536f..0fbd80d 100755
---- a/scripts/apply-audio-output.sh
-+++ b/scripts/apply-audio-output.sh
-@@ -175,6 +175,17 @@ apply_route() {
-   local overlay=""
-   local -a extras=()
- 
-+  if [[ "$(uname -m)" =~ ^(x86_64|i[3-6]86)$ ]]; then
-+    case "${route}" in
-+      hdmi|headphones|usb-dac)
-+        ALSA_DEVICE="${alsa_device}" MIXER_TYPE="${mixer}" "${CONFIGURE_MPD}" pc-alsa
-+        printf '{"ok":true,"route":"%s","reboot_required":false}\n' "${route}"
-+        return
-+        ;;
-+      *) echo "This audio route requires Raspberry Pi hardware." >&2; return 2 ;;
-+    esac
-+  fi
-+
-   case "${route}" in
-     dac-hat)
-       if [ -z "${hat_id}" ]; then
 diff --git a/scripts/golden-image-cleanup.sh b/scripts/golden-image-cleanup.sh
 --- a/scripts/golden-image-cleanup.sh
 +++ b/scripts/golden-image-cleanup.sh

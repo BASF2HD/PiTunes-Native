@@ -30,6 +30,12 @@ if [ -f "${CONFIG_FILE}" ]; then
   WLAN_INTERFACE="${WLAN_INTERFACE:-wlan0}"
 fi
 
+source "$(dirname "${BASH_SOURCE[0]}")/wifi-interface.sh"
+if ! WLAN_INTERFACE="$(find_wifi_interface "${WLAN_INTERFACE}")"; then
+  echo "No Wi-Fi interface detected. Check adapter firmware and the hardware radio switch." >&2
+  exit 2
+fi
+
 connection_failed() {
   nmcli connection modify "${STATION_CONNECTION}" connection.autoconnect no >/dev/null 2>&1 || true
 }

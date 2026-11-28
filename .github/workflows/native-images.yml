@@ -1,4 +1,5 @@
 name: Native development disk image
+run-name: pitunes-native-${{ inputs.arch }}
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +12,7 @@ permissions:
   contents: read
 jobs:
   image:
+    name: pitunes-native-${{ inputs.arch }}
     if: github.repository == 'BASF2HD/PiTunes-Native'
     runs-on: ubuntu-24.04
     timeout-minutes: 150
