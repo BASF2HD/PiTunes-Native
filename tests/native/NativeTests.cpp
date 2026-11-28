@@ -1,4 +1,9 @@
 #include "models/Domain.h"
+#ifdef PITUNES_STANDALONE
+#include "standalone/StandaloneBackend.h"
+#include <QDataStream>
+#include <QDir>
+#endif
 #include "models/LibraryModel.h"
 #include "coverflow/CoverFlowWidget.h"
 #include "ui/MainWindow.h"
@@ -74,6 +79,54 @@ class NativeTests : public QObject {
     Q_OBJECT
 private slots:
     void initTestCase() { QApplication::setStyle("Fusion"); }
+#ifdef PITUNES_STANDALONE
+    void standaloneIndexesAndDecodesWithoutAnAppliance() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto root = temp.filePath("music");
+        QVERIFY(QDir().mkpath(QDir(root).filePath("Test Album")));
+        const auto path = QDir(root).filePath("Test Album/Test Track.wav");
+        QFile wav(path);
+        QVERIFY(wav.open(QIODevice::WriteOnly));
+        QDataStream out(&wav);
+        out.setByteOrder(QDataStream::LittleEndian);
+        const quint32 frames = 48000 * 2, bytes = frames * 4;
+        out.writeRawData("RIFF", 4); out << quint32(bytes + 36); out.writeRawData("WAVEfmt ", 8);
+        out << quint32(16) << quint16(1) << quint16(2) << quint32(48000) << quint32(192000) << quint16(4) << quint16(16);
+        out.writeRawData("data", 4); out << bytes;
+        QCOMPARE(wav.write(QByteArray(bytes, '\0')), qint64(bytes));
+        wav.close();
+
+        StandaloneBackend backend(root, nullptr, temp.filePath("index.sqlite"), true);
+        QSignalSpy indexed(&backend, &StandaloneBackend::libraryChanged);
+        ApiClient api(QUrl("http://127.0.0.1:8080"));
+        api.setLocalDispatch(backend.transport());
+        QTRY_COMPARE(indexed.count(), 1);
+        QJsonObject page;
+        api.get("/api/library/albums", [&](QJsonObject result, QString error) {
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            page = result;
+        });
+        QTRY_COMPARE(page["total"].toInt(), 1);
+        const auto album = page["albums"].toArray().first().toObject();
+        QCOMPARE(album["title"].toString(), QString("Test Album"));
+        QJsonObject tracks;
+        api.get(QString("/api/library/album/%1/tracks").arg(album["id"].toInt()),
+                [&](QJsonObject result, QString error) {
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            tracks = result;
+        });
+        QTRY_COMPARE(tracks["tracks"].toArray().size(), 1);
+        QJsonObject playback;
+        api.post("/api/player/play", {{"file", tracks["tracks"].toArray().first().toObject()["file"]}},
+                 [&](QJsonObject result, QString error) {
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+            playback = result;
+        });
+        QTRY_COMPARE(playback["status"].toObject()["state"].toString(), QString("play"));
+        QCOMPARE(playback["status"].toObject()["duration"].toDouble(), 2.);
+    }
+#endif
     void callbackCanDestroyItsApiClient() {
         HttpFixture server; auto *api = new ApiClient(server.url()); QPointer<ApiClient> guard(api);
         bool done = false;

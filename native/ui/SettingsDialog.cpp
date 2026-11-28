@@ -24,6 +24,9 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSettings>
+#include <QCoreApplication>
+#include <QDir>
 #include <QSpinBox>
 #include <QStyleOptionSpinBox>
 #include <QTabBar>
@@ -40,6 +43,11 @@
 namespace PiTunes {
 namespace {
 void chooseMusicFolder(ApiClient *api, QLineEdit *field, QWidget *parent) {
+    if (api->isStandalone()) {
+        const auto folder = QFileDialog::getExistingDirectory(parent, "Choose music folder", field->text());
+        if (!folder.isEmpty()) field->setText(folder);
+        return;
+    }
     auto *dialog = new QDialog(parent);
     dialog->setWindowTitle("Choose music folder");
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -429,6 +437,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     auto *source = comboBox(library);
     source->addItem("USB / local folder", "local"); source->addItem("Internal library", "internal");
     library->addRow("Source", source);
+    if (api->isStandalone()) { library->labelForField(source)->hide(); source->hide(); }
     api->get("/api/settings", [guard, music, source](QJsonObject o, QString error) {
         if (!guard || !error.isEmpty()) return;
         const auto settings = o["settings"].toObject(); music->setText(textValue(settings["music_directory"]));
@@ -441,7 +450,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     }, libraryActions);
     button(library, "Rescan library", [=] { api->post("/api/library/rescan", {}, result); }, libraryActions);
     libraryActions->addStretch();
-    button(library, "Import browser data…", [=] {
+    if (!api->isStandalone()) button(library, "Import browser data…", [=] {
         const auto path = QFileDialog::getOpenFileName(this, "Import PiTunes browser data", {}, "PiTunes browser data (*.json)");
         if (path.isEmpty()) return;
         QFile file(path);
@@ -585,17 +594,20 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
             if (!error.isEmpty()) { result(o, error); return; }
             route->clear(); device->clear(); hat->clear();
             const bool pc = textValue(o["platform"]) == "pc";
-            audio->labelForField(route)->setVisible(!pc);
-            route->setVisible(!pc);
-            audio->labelForField(hat)->setVisible(!pc);
-            hat->setVisible(!pc);
-            deviceLabel->setText(pc ? "Output device" : "ALSA device");
+            const bool windows = textValue(o["platform"]) == "windows";
+            audio->labelForField(route)->setVisible(!pc && !windows);
+            route->setVisible(!pc && !windows);
+            audio->labelForField(hat)->setVisible(!pc && !windows);
+            hat->setVisible(!pc && !windows);
+            audio->labelForField(mixer)->setVisible(!windows);
+            mixer->setVisible(!windows);
+            deviceLabel->setText(pc || windows ? "Output device" : "ALSA device");
             if (pc) route->addItem("ALSA playback", "pc-alsa");
             for (const auto &v : pc ? QJsonArray{} : o["routes"].toArray()) {
                 const auto r = v.toObject();
                 route->addItem(r.isEmpty() ? textValue(v) : textValue(r["label"]), r.isEmpty() ? textValue(v) : textValue(r["id"]));
             }
-            device->addItem(pc ? "Automatic (prefer built-in audio)" : "ALSA default", "default");
+            device->addItem(windows ? "Windows default output" : pc ? "Automatic (prefer built-in audio)" : "ALSA default", "default");
             for (const auto &v : o["devices"].toArray()) {
                 const auto d = v.toObject();
                 const auto id = textValue(d["alsa"]);
@@ -634,7 +646,7 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     };
 #ifdef Q_OS_MACOS
     const auto host = api->baseUrl().host();
-    if (host == "localhost" || QHostAddress(host).isLoopback()) {
+    if (!api->isStandalone() && (host == "localhost" || QHostAddress(host).isLoopback())) {
         auto *checking = new QLabel("Checking sound output…");
         audio->addRow(checking);
         api->get("/api/system/info", [=](QJsonObject info, QString error) {
@@ -665,6 +677,26 @@ SettingsDialog::SettingsDialog(ApiClient *api, CaptionFontSizes fonts, QWidget *
     } else
 #endif
     setupApplianceAudio(false);
+
+    if (api->isStandalone()) {
+        auto *system = page("System");
+        setupDisplaySettings(system);
+#ifdef Q_OS_WIN
+        const QString runKey = "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+        auto *startup = new QCheckBox("Start PiTunes Native when I sign in");
+        const QString value = '"' + QDir::toNativeSeparators(QCoreApplication::applicationFilePath()) + '"';
+        startup->setChecked(QSettings(runKey, QSettings::NativeFormat).value("PiTunes Native").toString() == value);
+        system->addRow(startup);
+        connect(startup, &QCheckBox::toggled, this, [=](bool checked) {
+            QSettings run(runKey, QSettings::NativeFormat);
+            if (checked) run.setValue("PiTunes Native", value);
+            else if (run.value("PiTunes Native").toString() == value) run.remove("PiTunes Native");
+            run.sync();
+            if (run.status() != QSettings::NoError) status->setText("Could not update Windows startup.");
+        });
+#endif
+        return;
+    }
 
     auto *network = page("Network");
     auto *netStatus = new QLabel; netStatus->setWordWrap(true); network->addRow(netStatus);

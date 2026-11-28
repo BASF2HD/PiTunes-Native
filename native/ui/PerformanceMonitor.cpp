@@ -11,6 +11,12 @@
 #include <array>
 #ifdef Q_OS_LINUX
 #include <unistd.h>
+#elif defined(Q_OS_WIN)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#include <windows.h>
+#include <psapi.h>
 #endif
 
 namespace PiTunes {
@@ -131,7 +137,54 @@ struct PerformanceMonitor::Sampler {
         }
     }
 
+#ifdef Q_OS_WIN
+    Counter winTotal = 0, winIdle = 0, winProcess = 0;
+    Sample collectWindows(bool detailed) {
+        Sample result;
+        const auto ticks = [](const FILETIME &time) {
+            return (Counter(time.dwHighDateTime) << 32) | time.dwLowDateTime;
+        };
+        MEMORYSTATUSEX memory{};
+        memory.dwLength = sizeof(memory);
+        memoryAvailable = GlobalMemoryStatusEx(&memory);
+        if (memoryAvailable) {
+            result.ram = memory.ullTotalPhys / 1024;
+            result.available = memory.ullAvailPhys / 1024;
+        }
+        FILETIME idle{}, kernel{}, user{};
+        Counter totalDelta = 0;
+        if (GetSystemTimes(&idle, &kernel, &user)) {
+            const auto total = ticks(kernel) + ticks(user);
+            const auto idleTicks = ticks(idle);
+            totalDelta = winTotal > 0 ? total - winTotal : 0;
+            if (totalDelta > 0) result.cpu.append(qBound(0., 100. * (totalDelta - idleTicks + winIdle) / totalDelta, 100.));
+            winTotal = total;
+            winIdle = idleTicks;
+        }
+        if (detailed) {
+            auto &current = result.processes[0];
+            PROCESS_MEMORY_COUNTERS memoryCounters{};
+            memoryCounters.cb = sizeof(memoryCounters);
+            if (GetProcessMemoryInfo(GetCurrentProcess(), &memoryCounters, sizeof(memoryCounters)))
+                current.rssKiB = memoryCounters.WorkingSetSize / 1024;
+            FILETIME start{}, exit{}, processKernel{}, processUser{};
+            if (GetProcessTimes(GetCurrentProcess(), &start, &exit, &processKernel, &processUser)) {
+                const auto running = ticks(processKernel) + ticks(processUser);
+                if (winProcess > 0 && totalDelta > 0)
+                    current.cpu = qBound(0., 100. * (running - winProcess) / totalDelta, 100.);
+                winProcess = running;
+            }
+            result.uptime = GetTickCount64() / 1000.;
+        }
+        return result;
+    }
+#endif
+
     Sample collect(bool detailed, double seconds) {
+#ifdef Q_OS_WIN
+        Q_UNUSED(seconds);
+        return collectWindows(detailed);
+#else
         Sample result;
         const auto memory = read("/proc/meminfo", 8192).split('\n');
         memoryAvailable = false;
@@ -234,6 +287,7 @@ struct PerformanceMonitor::Sampler {
         const auto uptime = oneLine("/proc/uptime").split(' ').first().toDouble(&ok);
         if (ok) result.uptime = uptime;
         return result;
+#endif
     }
 };
 
@@ -323,12 +377,16 @@ void PerformanceMonitor::refresh() {
         display += "\nRAM " + memory;
         if (ramKnown) display += QString(" (%1%, %2 MiB available)").arg(number(100. * sample.used() / sample.ram))
                                                                   .arg(number(sample.available / 1024., 0));
+#ifndef Q_OS_WIN
         display += sample.ram > 0 ? QString("\nSwap %1 / %2 MiB").arg(number((sample.swap - sample.swapFree) / 1024.))
                                                                 .arg(number(sample.swap / 1024.)) : QString("\nSwap n/a");
         display += sample.zramRaw >= 0 ? QString("  ZRAM %1 MiB data / %2 MiB resident")
             .arg(number(sample.zramRaw / 1024.)).arg(number(sample.zramMemory / 1024.)) : QString("  ZRAM n/a");
         display += "\nCPU " + temp + "  " + formatMetric(sample.frequency, " MHz", 0);
         const std::array<const char *, 4> labels{"PiTunes Native", "Python backend", "MPD", "Xorg"};
+#else
+        const std::array<const char *, 1> labels{"PiTunes Native"};
+#endif
         for (size_t i = 0; i < labels.size(); ++i) {
             const auto &p = sample.processes[i];
             display += QString("\n%1: %2 RSS  %3 CPU").arg(labels[i])

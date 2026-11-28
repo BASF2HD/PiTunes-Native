@@ -1,4 +1,7 @@
 #include "ui/MainWindow.h"
+#ifdef PITUNES_STANDALONE
+#include "standalone/StandaloneBackend.h"
+#endif
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QFileInfo>
@@ -13,7 +16,10 @@ int main(int argc, char **argv) {
     parser.addHelpOption(); parser.addVersionOption();
     parser.addOption({"api", "API server (loopback by default)", "url", "http://127.0.0.1:8080"});
     parser.addOption({"demo", "Explicit offline UI demonstration; no audio"});
-    parser.addOption({"fullscreen", "Run the appliance fullscreen"});
+    parser.addOption({"fullscreen", "Run the player fullscreen"});
+#ifdef PITUNES_STANDALONE
+    parser.addOption({"music-folder", "Use a local, USB or network music folder", "folder"});
+#endif
     parser.addOption({"reduced-motion", "Disable cover transitions and use a smaller art budget"});
     parser.addOption({"screenshot", "Write a development screenshot and exit", "path"});
     parser.addOption({"screenshot-delay", "Milliseconds before the development screenshot", "ms", "2000"});
@@ -38,7 +44,19 @@ int main(int argc, char **argv) {
         "QAbstractScrollArea::corner{background:transparent;}"
         "QTabBar::tab{padding:10px;}QTabBar::tab:selected{border-bottom:2px solid white;}"
         "QSlider::groove:horizontal{height:3px;background:#555;}QSlider::handle:horizontal{background:white;width:12px;margin:-5px 0;border-radius:6px;}");
-    PiTunes::MainWindow window(api, parser.isSet("demo"), parser.isSet("reduced-motion"));
+    PiTunes::ApiClient::LocalDispatch transport;
+#ifdef PITUNES_STANDALONE
+    std::unique_ptr<PiTunes::StandaloneBackend> standalone;
+    if (!parser.isSet("api") && !parser.isSet("demo")) {
+        standalone = std::make_unique<PiTunes::StandaloneBackend>(parser.value("music-folder"));
+        transport = standalone->transport();
+    }
+#endif
+    PiTunes::MainWindow window(api, parser.isSet("demo"), parser.isSet("reduced-motion"), std::move(transport));
+#ifdef PITUNES_STANDALONE
+    if (standalone) QObject::connect(standalone.get(), &PiTunes::StandaloneBackend::libraryChanged,
+                                    &window, &PiTunes::MainWindow::reloadStandaloneLibrary);
+#endif
     if (parser.isSet("window-size")) {
         const auto parts = parser.value("window-size").split('x');
         if (parts.size() == 2) window.resize(qBound(320, parts[0].toInt(), 3840), qBound(320, parts[1].toInt(), 2160));

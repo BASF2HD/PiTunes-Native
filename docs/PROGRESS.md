@@ -394,3 +394,14 @@ for automatic MPD startup, and supports reported speaker/headphone/auto-mute
 controls. The guarded test tone and MPD stopped-queue/file-indexing fixes have
 fixture coverage. A local driver preference and offline preparation guide
 cover the BCM4312. Physical playback, Wi-Fi and animation remain to retest.
+
+## Windows standalone prototype
+
+The standalone option adds an in-process transport, a SQLite album index,
+TagLib metadata and miniaudio playback without changing the Linux default.
+The local macOS standalone build passed the Qt regression suite, including a
+temporary WAV library and decoder playback into a silent test sink. This
+exercises the native scan, queue and decode path without a Python or MPD
+service. WASAPI routing and Windows 7 compatibility still require Windows
+testing. The independent ZIP workflow and same-hardware benchmark method are
+recorded in [Windows standalone](WINDOWS_STANDALONE.md).

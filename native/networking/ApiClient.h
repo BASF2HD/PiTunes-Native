@@ -11,7 +11,10 @@ class ApiClient : public QObject {
 public:
     using JsonCallback = std::function<void(QJsonObject, QString)>;
     using BytesCallback = std::function<void(QByteArray, QString)>;
+    using LocalDispatch = std::function<void(QUrl, bool, QByteArray, BytesCallback)>;
     explicit ApiClient(QUrl base, QObject *parent = nullptr);
+    void setLocalDispatch(LocalDispatch dispatch) { m_local = std::move(dispatch); }
+    bool isStandalone() const { return bool(m_local); }
     QUrl baseUrl() const { return m_base; }
     QNetworkReply *get(const QString &path, JsonCallback callback, int timeoutMs = 10000);
     QNetworkReply *post(const QString &path, const QJsonObject &body, JsonCallback callback,
@@ -23,5 +26,6 @@ private:
                            int timeoutMs, int maxBytes);
     QNetworkAccessManager m_network;
     QUrl m_base;
+    LocalDispatch m_local;
 };
 } // namespace PiTunes

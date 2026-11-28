@@ -36,6 +36,51 @@ if(BUILD_TESTING)
   add_test(NAME native-contracts COMMAND native-tests)
   set_tests_properties(native-contracts PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
+option(PITUNES_STANDALONE "Build the native standalone audio and library backend" ${WIN32})
+if(PITUNES_STANDALONE)
+  include(FetchContent)
+  if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+  endif()
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+  find_package(Qt5 5.15 REQUIRED COMPONENTS Sql)
+  set(BUILD_BINDINGS OFF CACHE BOOL "Build TagLib bindings" FORCE)
+  set(WITH_ZLIB OFF CACHE BOOL "Build TagLib zlib support" FORCE)
+  FetchContent_Declare(taglib
+    URL https://codeload.github.com/taglib/taglib/tar.gz/refs/tags/v1.13.1
+    URL_HASH SHA256=c8da2b10f1bfec2cd7dbfcd33f4a2338db0765d851a50583d410bacf055cfd0b)
+  FetchContent_Declare(miniaudio
+    SOURCE_SUBDIR unused-build
+    URL https://codeload.github.com/mackron/miniaudio/tar.gz/refs/tags/0.11.23
+    URL_HASH SHA256=1062155cc5882b55c48cb37f57a4dc783669e83ae0838535c62b206eeb1587a6)
+  FetchContent_MakeAvailable(taglib miniaudio)
+  add_library(pitunes-standalone STATIC native/standalone/StandaloneBackend.cpp native/standalone/Miniaudio.cpp)
+  target_include_directories(pitunes-standalone PRIVATE
+    ${miniaudio_SOURCE_DIR} ${taglib_SOURCE_DIR}/taglib ${taglib_SOURCE_DIR}/taglib/toolkit
+    ${taglib_BINARY_DIR})
+  target_compile_definitions(pitunes-standalone PUBLIC PITUNES_STANDALONE
+    PRIVATE TAGLIB_STATIC MA_NO_ENGINE MA_NO_GENERATION MA_NO_ENCODING MA_NO_RESOURCE_MANAGER MA_NO_AVX2)
+  target_link_libraries(pitunes-standalone PUBLIC pitunes-core Qt5::Sql PRIVATE tag)
+  if(WIN32)
+    target_compile_definitions(pitunes-standalone PRIVATE _WIN32_WINNT=0x0601 NOMINMAX WIN32_LEAN_AND_MEAN)
+  endif()
+  target_link_libraries(pitunes-native PRIVATE pitunes-standalone)
+  if(BUILD_TESTING)
+    target_link_libraries(native-tests PRIVATE pitunes-standalone)
+  endif()
+  install(FILES "${taglib_SOURCE_DIR}/COPYING.MPL" "${taglib_SOURCE_DIR}/COPYING.LGPL"
+    DESTINATION licenses/taglib)
+  install(FILES "${miniaudio_SOURCE_DIR}/LICENSE" DESTINATION licenses/miniaudio)
+endif()
+if(WIN32)
+  set_target_properties(pitunes-native PROPERTIES WIN32_EXECUTABLE ON)
+  target_link_libraries(pitunes-native PRIVATE psapi)
+  if(BUILD_TESTING)
+    target_link_libraries(native-tests PRIVATE psapi)
+  endif()
+  install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION .)
+endif()
+
 set(CPACK_GENERATOR DEB)
 set(CPACK_PACKAGE_NAME pitunes-native)
 set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")

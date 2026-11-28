@@ -62,3 +62,9 @@ RAM. None of these can be established by mock API responses alone.
   and gesture-axis handling are covered by native code and require hardware
   regression testing. Wi-Fi diagnostics and boot USB export are implemented.
 - Internal SSD installation is design-only. See [Atom hardware](ATOM_HARDWARE.md).
+
+The optional Windows standalone target reuses the native Qt interface and
+provides folder-based albums, local metadata/SQLite indexing, cover files and
+MP3/FLAC/WAV through WASAPI. The larger feature migration is tracked in
+[Windows standalone](WINDOWS_STANDALONE.md). The Linux appliance path remains
+available and uses MPD/ALSA.

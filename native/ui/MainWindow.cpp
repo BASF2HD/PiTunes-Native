@@ -122,10 +122,11 @@ private:
 };
 }
 
-MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
+MainWindow::MainWindow(QUrl api, bool demo, bool reduced, ApiClient::LocalDispatch local) : m_demo(demo) {
     m_forceReducedMotion = reduced;
     setWindowTitle("PiTunes Native"); setWindowIcon(QIcon(":/brand/icon.png")); resize(1100, 720);
     m_api = new ApiClient(std::move(api), this);
+    m_api->setLocalDispatch(std::move(local));
     m_library = new LibraryModel(m_api, this);
     QSettings preferences;
     const int defaultMode = preferences.value("native/reducedMotion", false).toBool()
@@ -491,6 +492,12 @@ MainWindow::MainWindow(QUrl api, bool demo, bool reduced) : m_demo(demo) {
     else { m_library->reload(); refreshPlayer(); m_poll.start(); }
     m_flow->setFocus();
 }
+void MainWindow::reloadStandaloneLibrary() {
+    if (!m_api->isStandalone()) return;
+    selectBrowseTab("Albums");
+    browseAlbums(m_albumScope, m_albumSort);
+}
+
 void MainWindow::setMessage(const QString &message) {
     m_message->setText(message);
     m_message->setVisible(!message.isEmpty());

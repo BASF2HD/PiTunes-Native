@@ -2,10 +2,31 @@
 #include "models/Domain.h"
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QPointer>
 #include <QTimer>
 #include <memory>
 
 namespace PiTunes {
+namespace {
+class LocalReply final : public QNetworkReply {
+public:
+    LocalReply(ApiClient::BytesCallback callback, QObject *parent)
+        : QNetworkReply(parent), m_callback(std::move(callback)) {}
+    void deliver(QByteArray bytes, QString error) {
+        if (isFinished()) return;
+        setFinished(true);
+        auto callback = std::move(m_callback);
+        deleteLater();
+        callback(std::move(bytes), std::move(error));
+    }
+    void abort() override { deliver({}, "Request cancelled."); }
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+private:
+    ApiClient::BytesCallback m_callback;
+};
+}
+
 ApiClient::ApiClient(QUrl base, QObject *parent) : QObject(parent), m_network(this), m_base(std::move(base)) {}
 QString ApiClient::payloadError(const QJsonObject &o) {
     if (o.contains("error") && !textValue(o["error"]).isEmpty()) return textValue(o["error"]);
@@ -43,6 +64,21 @@ QNetworkReply *ApiClient::request(const QString &path, const QByteArray *body, B
         || !url.userInfo().isEmpty() || !url.path().startsWith("/api/")) {
         QTimer::singleShot(0, this, [callback] { callback({}, "Rejected an API URL outside the configured server."); });
         return nullptr;
+    }
+    if (m_local) {
+        auto *reply = new LocalReply(std::move(callback), this);
+        const QPointer<LocalReply> guard(reply);
+        const auto payload = body ? *body : QByteArray();
+        QTimer::singleShot(timeoutMs, reply, [reply] { reply->deliver({}, "The local request timed out."); });
+        QTimer::singleShot(0, reply, [this, guard, url, mutation = body != nullptr, payload, maxBytes] {
+            if (!guard || guard->isFinished()) return;
+            m_local(url, mutation, payload, [guard, maxBytes](QByteArray response, QString error) {
+                if (!guard) return;
+                if (response.size() > maxBytes) guard->deliver({}, "The local response exceeded the response limit.");
+                else guard->deliver(std::move(response), std::move(error));
+            });
+        });
+        return reply;
     }
     QNetworkRequest req(url);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);

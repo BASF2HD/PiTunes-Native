@@ -21,7 +21,8 @@ class MediaInfoPanel;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QUrl api, bool demo = false, bool reduced = false);
+    explicit MainWindow(QUrl api, bool demo = false, bool reduced = false, ApiClient::LocalDispatch local = {});
+    void reloadStandaloneLibrary();
     CoverFlowWidget *coverFlow() const { return m_flow; }
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

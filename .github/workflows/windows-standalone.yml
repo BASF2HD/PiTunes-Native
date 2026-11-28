@@ -1,0 +1,111 @@
+name: Windows standalone packages
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'CMakeLists.txt'
+      - 'tests/native/**'
+      - 'docs/WINDOWS_STANDALONE.md'
+      - '.github/workflows/windows-standalone.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            qt: win32_mingw81
+            tools: qt.tools.win32_mingw810
+            compiler: mingw810_32
+            platform: mingw81_32
+          - arch: x64
+            qt: win64_mingw81
+            tools: qt.tools.win64_mingw810
+            compiler: mingw810_64
+            platform: mingw81_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install archived Qt 5.15.2 and matching MinGW 8.1
+        shell: pwsh
+        env:
+          QT_ARCHIVE: ${{ matrix.qt }}
+          QT_TOOLS: ${{ matrix.tools }}
+        run: |
+          python -m pip install aqtinstall==3.3.0
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m aqt install-qt windows desktop 5.15.2 $env:QT_ARCHIVE -O sdk
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m aqt install-tool windows desktop tools_mingw $env:QT_TOOLS -O sdk
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build and run regression tests
+        shell: pwsh
+        env:
+          COMPILER: ${{ matrix.compiler }}
+          PLATFORM: ${{ matrix.platform }}
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          $qt = "$PWD/sdk/5.15.2/$env:PLATFORM"
+          $mingw = "$PWD/sdk/Tools/$env:COMPILER/bin"
+          $env:Path = "$mingw;$qt/bin;$env:Path"
+          $cpu = if ($env:PACKAGE_ARCH -eq 'x86') { '-march=i686 -msse2 -mno-avx -mno-avx2' } else { '-mno-avx -mno-avx2' }
+          cmake -S . -B build -G Ninja "-DCMAKE_CXX_FLAGS=$cpu" "-DCMAKE_C_FLAGS=$cpu" "-DCMAKE_PREFIX_PATH=$qt" "-DCMAKE_CXX_COMPILER=$mingw/g++.exe" -DCMAKE_BUILD_TYPE=Release -DPITUNES_STANDALONE=ON
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package the portable application
+        shell: pwsh
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+          COMPILER: ${{ matrix.compiler }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          $qt = "$PWD/sdk/5.15.2/$env:PLATFORM"
+          $mingw = "$PWD/sdk/Tools/$env:COMPILER/bin"
+          $env:Path = "$mingw;$qt/bin;$env:Path"
+          New-Item portable -ItemType Directory | Out-Null
+          Copy-Item build/pitunes-native.exe, LICENSE, THIRD_PARTY_NOTICES.md, docs/WINDOWS_STANDALONE.md portable
+          & "$qt/bin/windeployqt.exe" --release --no-angle --no-opengl-sw --no-system-d3d-compiler --no-compiler-runtime --no-translations portable/pitunes-native.exe
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($runtime in @("libstdc++-6.dll","libwinpthread-1.dll")) {
+            Copy-Item "$mingw/$runtime" portable
+          }
+          Get-ChildItem "$mingw/libgcc_s_*-1.dll" | Copy-Item -Destination portable
+          if (!(Test-Path portable/sqldrivers/qsqlite.dll)) {
+            New-Item portable/sqldrivers -ItemType Directory -Force | Out-Null
+            Copy-Item "$qt/plugins/sqldrivers/qsqlite.dll" portable/sqldrivers
+          }
+          New-Item portable/licenses/taglib, portable/licenses/miniaudio, portable/licenses/qt -ItemType Directory -Force | Out-Null
+          Copy-Item build/_deps/taglib-src/COPYING.* portable/licenses/taglib
+          Copy-Item build/_deps/miniaudio-src/LICENSE portable/licenses/miniaudio
+          foreach ($license in @("LICENSE.LGPL3","LICENSE.GPL3")) {
+            Invoke-WebRequest "https://raw.githubusercontent.com/qt/qtbase/v5.15.2/$license" -OutFile "portable/licenses/qt/$license"
+          }
+          foreach ($entry in Get-ChildItem portable -Recurse -Filter *.dll) {
+            if ($entry.Name -match "webengine|webkit|chromium|libEGL|libGLES|opengl32sw") { throw "Unexpected renderer: $($entry.Name)" }
+          }
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:QT_PLUGIN_PATH = ''
+          $env:Path = "$env:SystemRoot/System32;$env:SystemRoot"
+          $app = Start-Process -FilePath "$PWD/portable/pitunes-native.exe" -ArgumentList @("--demo","--window-size","1024x600","--screenshot","preview.png") -PassThru
+          if (!$app.WaitForExit(20000)) { $app.Kill(); throw "Portable UI startup timed out" }
+          if ($app.ExitCode -ne 0 -or !(Test-Path preview.png)) { throw "Portable UI smoke failed" }
+          "[PiTunes Native] source commit: $env:GITHUB_SHA" | Set-Content portable/BUILD.txt
+          Compress-Archive -Path portable/* -DestinationPath "PiTunes-Native-Windows-$env:PACKAGE_ARCH.zip"
+          (Get-FileHash "PiTunes-Native-Windows-$env:PACKAGE_ARCH.zip" -Algorithm SHA256).Hash |
+            Set-Content "PiTunes-Native-Windows-$env:PACKAGE_ARCH.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiTunes-Native-Windows-${{ matrix.arch }}
+          path: PiTunes-Native-Windows-${{ matrix.arch }}.zip*
+          if-no-files-found: error
