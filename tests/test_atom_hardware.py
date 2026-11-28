@@ -64,11 +64,19 @@ Simple mixer control 'Auto-Mute Mode',0
         journal = ("Failed to open ALSA device /mnt/music/personal file.flac\n"
                    "ACPI BIOS Error (bug): AE_ALREADY_EXISTS\n"
                    "failed to load b43/ucode15.fw (-2)\nssid=private-network\n")
+        def file_data(name, *args, **kwargs):
+            return {
+                "cpuinfo": "model name : Intel(R) Atom(TM) CPU N270 @ 1.60GHz",
+                "product_name": "Standard PC (Q35 + ICH9, 2009)",
+            }.get(Path(name).name, "")
+
         with patch.object(report, "run", side_effect=lambda *cmd, **kw: journal if cmd[0] == "journalctl" else ""), \
-                patch.object(report, "read", return_value=""):
+                patch.object(report, "read", side_effect=file_data):
             output = "\n".join(report.collect())
         self.assertIn("audio-output-open-failed: 1", output)
         self.assertIn("acpi-bios-error: 1", output)
         self.assertIn("b43-ucode15-missing: 1", output)
+        self.assertIn("CPU: Intel(R) Atom(TM) CPU N270 @ 1.60GHz", output)
+        self.assertIn("product_name: Standard PC (Q35 + ICH9, 2009)", output)
         self.assertNotIn("personal file.flac", output)
         self.assertNotIn("private-network", output)

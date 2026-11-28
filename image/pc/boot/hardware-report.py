@@ -51,7 +51,7 @@ def run(*command, timeout=5):
 
 
 def safe_component(text):
-    return text if re.fullmatch(r"[\w .()+/-]{1,96}", text, re.ASCII) else "unavailable"
+    return text if re.fullmatch(r"[\w .,()@+/-]{1,96}", text, re.ASCII) else "unavailable"
 
 
 def flags(text, patterns):

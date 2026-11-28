@@ -336,7 +336,7 @@ messages, not installed browser packages or authorization to publish a release.
 The owner confirmed the i386 development USB boots on the real 1 GB PC and
 recognises the separate music USB. Photos indicate missing b43 ucode15,
 ACPI firmware errors that did not prevent boot, and an unresolved playback 502.
-The earlier four-architecture browser audit is independent of this result.
+The earlier browser dependency audit is independent of this result.
 The 38161d0 i386 image passed the expanded 1 GiB native BIOS/UEFI, fault isolation
 and remote web smoke test in [Actions](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46063960115).
 
@@ -358,3 +358,21 @@ No physical performance metrics were collected in this workspace.
 The first Linux package run for this change caught a Linux-only missing
 `QCoreApplication` include in the monitor. It reproduced on both PC targets
 and was corrected in a follow-up. The hosted backend and release checks passed.
+
+The exact i386 development image at `448af5814f4bb4a62d9d5cf035fc8d64d1524835`
+was built and uploaded in
+[Actions](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46090851382/artifacts/15241166985).
+[Native CI](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46090851398)
+passed the backend and all four architecture package jobs. The Mac Release
+and Debug suites each passed 41 Qt test entries. Controlled Mac frame and
+monitor overhead measurements are recorded in PERFORMANCE.
+
+On that image the first smoke run reached BIOS/UEFI boot and playback but
+looked for the routine report too early on the forced-failure boot path. The
+rerun checked the routine report during a healthy boot. It passed BIOS and
+IA32 UEFI, USB playback through default and detected HDA analogue routes,
+playback with forced Xorg failure, both FAT diagnostic reports, and native-only
+local process inspection with remote browser assets served by nginx.
+[Smoke evidence](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46092554755/artifacts/15241698180).
+The verified image's report can omit model strings containing commas or @.
+A fixture-tested follow-up accepts that punctuation in the source.
