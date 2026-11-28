@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -63,6 +64,34 @@ def verify_hardware_report(serial):
     print("PITUNES_HARDWARE_AUDIT " + json.dumps({"supported": True, "error": info}), file=serial, flush=True)
 
 
+def playback_evidence(serial):
+    deadline = time.monotonic() + 85
+    old = {}
+    config = Path("/etc/mpd.conf").read_text(errors="replace")
+    selection = re.findall(r'^\s*(?:device|mixer_type)\s+"[^"\n]+"', config, re.M)
+    print("PITUNES_MPD_CONFIG " + json.dumps([line.strip() for line in selection]), file=serial, flush=True)
+    while time.monotonic() < deadline:
+        result = {}
+        try:
+            with socket.create_connection(("127.0.0.1", 6600), timeout=1) as connection:
+                with connection.makefile("rwb") as stream:
+                    if stream.readline().startswith(b"OK MPD"):
+                        stream.write(b"status\n")
+                        stream.flush()
+                        for raw in stream:
+                            if raw == b"OK\n":
+                                break
+                            key, _, value = raw.decode(errors="replace").strip().partition(": ")
+                            if key in {"state", "error", "playlistlength", "audio", "volume"}:
+                                result[key] = value
+        except OSError:
+            pass
+        if result and result != old:
+            print("PITUNES_MPD_STATUS " + json.dumps(result), file=serial, flush=True)
+            old = result
+        time.sleep(2)
+
+
 def main():
     # Let the inherited late-Samba timer fire before recording a stable session.
     time.sleep(20)
@@ -78,6 +107,7 @@ def main():
     with open("/dev/ttyS0", "w", encoding="ascii") as serial:
         print("PITUNES_BOOT_AUDIT " + json.dumps(samples, separators=(",", ":")), file=serial, flush=True)
         verify_hardware_report(serial)
+        playback_evidence(serial)
 
 
 if __name__ == "__main__":
