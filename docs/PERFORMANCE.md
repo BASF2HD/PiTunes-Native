@@ -92,3 +92,29 @@ with the monitor Off, Compact and Detailed, recording total CPU and the Qt
 process RSS independently. Repeat in reversed order on each physical machine.
 The requested less-than-2 MiB RSS and less-than-1 percentage point total CPU
 targets still require physical measurements.
+
+## Development rendering measurements
+
+Local Qt 5 Release on Apple M5 Pro, Qt offscreen raster backend, 1000×610
+viewport at device pixel ratio 1, 16 synthetic PNG covers served over loopback.
+Each animation run used 12 adjacent-cover transitions with 455 ms between
+selections. Process CPU is a fraction of one CPU core over the whole sequence.
+
+| Mode | Animation paints | Active FPS | Mean paint | Peak paint | Process CPU |
+|---|---:|---:|---:|---:|---:|
+| Full | 302 | 59.05 | 6.05 ms | 12.16 ms | 35.07% |
+| Lightweight | 144 | 27.55 | 4.31 ms | 5.55 ms | 13.64% |
+
+Separate 9-second idle samples using the same setup measured process CPU at
+0.15% Off, 0.37% Compact and 0.31% Detailed. Compared with the RSS immediately
+before enabling the monitor in each run, Compact grew by 272 KiB and Detailed
+by 1,376 KiB. The stage painted once on opening each panel and had zero paints
+while idle with the monitor Off. Linux counters and Xorg performance are absent
+from this Mac measurement. Confirm the monitor and CoverFlow on both physical
+targets before using these values to set a release threshold.
+
+A repeat in reversed order measured 5.80 ms mean / 13.12 ms peak in Full and
+4.33 ms mean / 5.77 ms peak in Lightweight, with 33.58% and 13.74% one-core
+process CPU respectively. Idle process CPU was 0.24% Off, 0.35% Compact and
+0.37% Detailed, with measured RSS growth of 272 KiB Compact and 1,344 KiB
+Detailed. Each active panel again caused one initial stage paint.

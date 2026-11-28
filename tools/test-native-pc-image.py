@@ -69,6 +69,43 @@ def verify_processes(guest, evidence):
     assert len({sample["players"][0]["pid"] for sample in report}) == 1, report
 
 
+def verify_hardware_report(guest, evidence):
+    serial = evidence / (guest.name + ".serial.log")
+    marker = "PITUNES_HARDWARE_AUDIT "
+
+    def read_report():
+        for line in serial.read_text(errors="replace").splitlines():
+            if marker in line:
+                try:
+                    return json.loads(line.split(marker, 1)[1])
+                except json.JSONDecodeError:
+                    continue
+        return False
+
+    audit = reference.wait_for("routine boot hardware report", read_report, timeout=170)
+    if not audit["supported"]:
+        return False
+    assert "report" in audit, audit.get("error")
+    report = audit["report"]
+    assert "Source: " in report and "Source: unknown" not in report
+    assert "ALSA playback devices" in report and "MPD journal and recent log (classified counts)" in report
+    assert reference.TRACK not in report and "BEGIN OPENSSH" not in report
+    (evidence / "pitunes-hardware.txt").write_text(report)
+    return True
+
+
+def verify_detected_audio_route(guest):
+    audio = guest.api("audio/devices")
+    if audio.get("platform") != "pc":
+        return False
+    analog = next(d for d in audio["devices"] if "analog" in d["label"].lower())
+    assert analog["alsa"].startswith("plughw:CARD="), analog
+    applied = guest.api("audio/output", {"output": "pc-alsa", "alsa": analog["alsa"], "mixer": "software"}, timeout=40)
+    assert applied.get("ok") is True, applied
+    reference.verify_uefi(guest)
+    return True
+
+
 def verify_remote_frontend(guest):
     for path, expected_type in (("/", "text/html"), ("/assets/app.js", "application/javascript"),
                                 ("/assets/styles.css", "text/css")):
@@ -99,6 +136,8 @@ def main():
             assert status.get("supported") is False and status.get("repository") == "BASF2HD/PiTunes-Native", status
             verify_processes(guest, evidence)
             verify_remote_frontend(guest)
+            verified_hardware_report = verify_hardware_report(guest, evidence)
+            verified_audio_route = verify_detected_audio_route(guest)
         fault = reference.display_fault_disk(work, image)
         with reference.Guest(args.arch, work, fault, music, evidence, "native-display-fault", uefi=True,
                              lan=True, memory_mib=1024, save_overlay=True) as guest:
@@ -119,17 +158,11 @@ def main():
         report = evidence / "pitunes-display.log"
         reference.run("mcopy", "-i", fat, "::pitunes-display.log", report)
         assert "LightDM journal" in report.read_text(), "Display report is incomplete"
-        if "classified counts" in report.read_text():
-            hardware = evidence / "pitunes-hardware.txt"
-            reference.run("mcopy", "-i", fat, "::pitunes-hardware.txt", hardware)
-            observations = hardware.read_text()
-            assert "Source: " in observations and "ALSA playback devices" in observations
-            assert "MPD journal and recent log (classified counts)" in observations
-            assert "Music fixture" not in observations and "BEGIN OPENSSH" not in observations
     (evidence / "native-smoke-result.json").write_text(json.dumps({
         "measurementKind": "virtual machine smoke test", "architecture": args.arch,
         "memoryMiB": 1024, "biosOfflineNativeGui": True, "uefiGuiAndSilentWavPlayback": True,
         "mpdPlaybackWithDisplayFailure": True, "physicalHardware": False,
+        "routineHardwareReport": verified_hardware_report, "detectedAlsaRoutePlayback": verified_audio_route,
         "singleNativePlayerAfterLateBoot": True, "browserProcessesObserved": False, "legacyDisplayMasked": True,
         "remoteHtmlJsCssServedByNginx": True,
         "boundedDisplayFailure": True, "fatDiagnosticReport": True,

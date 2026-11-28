@@ -65,3 +65,20 @@ copy.
 Evidence links and exact results are recorded in [PROGRESS.md](PROGRESS.md).
 The PC VM smoke is separate from the Atom and Zero 2 W physical performance
 comparison in [PERFORMANCE.md](PERFORMANCE.md).
+
+## Downloaded image inspection
+
+The [read-only artifact inspection](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46091020660)
+mounted the checksum-verified i386, armhf and arm64 root filesystems from
+`38161d0`. All three reports show an empty forbidden-package list, the legacy
+launcher masked, no unexpected legacy references, captured ELF dependencies,
+and the native executable as the user-service command.
+
+| Architecture | Installed packages | Rootfs evidence |
+|---|---:|---|
+| i386 | 597 | [Read-only report](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46091020660/artifacts/15241341004) |
+| armhf | 896 | [Read-only report](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46091020660/artifacts/15241066547) |
+| arm64 | 882 | [Read-only report](https://github.com/BASF2HD/PiTunes-Native/actions/runs/46091020660/artifacts/15241466298) |
+
+The earlier amd64 artifact URL returned HTTP 404 during retrieval. amd64
+package testing remains available through Native CI.

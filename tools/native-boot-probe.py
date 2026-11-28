@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -39,6 +40,29 @@ def snapshot():
     }
 
 
+def verify_hardware_report(serial):
+    service = Path("/etc/systemd/system/pitunes-pc-hardware-report.service")
+    if not service.exists():
+        print("PITUNES_HARDWARE_AUDIT " + json.dumps({"supported": False}), file=serial, flush=True)
+        return
+    timeout = time.monotonic() + 120
+    report = Path("/boot/efi/pitunes-hardware.txt")
+    while time.monotonic() < timeout:
+        try:
+            body = report.read_text()
+        except FileNotFoundError:
+            time.sleep(2)
+            continue
+        print("PITUNES_HARDWARE_AUDIT " + json.dumps({"supported": True, "report": body}),
+              file=serial, flush=True)
+        return
+    info = subprocess.run(
+        ["systemctl", "status", "pitunes-pc-hardware-report.timer", "pitunes-pc-hardware-report.service"],
+        capture_output=True, text=True, timeout=10, check=False,
+    ).stdout
+    print("PITUNES_HARDWARE_AUDIT " + json.dumps({"supported": True, "error": info}), file=serial, flush=True)
+
+
 def main():
     # Let the inherited late-Samba timer fire before recording a stable session.
     time.sleep(20)
@@ -52,7 +76,8 @@ def main():
                 break
         time.sleep(2)
     with open("/dev/ttyS0", "w", encoding="ascii") as serial:
-        print("PITUNES_BOOT_AUDIT " + json.dumps(samples, separators=(",", ":")), file=serial)
+        print("PITUNES_BOOT_AUDIT " + json.dumps(samples, separators=(",", ":")), file=serial, flush=True)
+        verify_hardware_report(serial)
 
 
 if __name__ == "__main__":
